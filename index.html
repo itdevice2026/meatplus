@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>IT Department BOM Entry System</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root{--navy:#1f3864;--blue:#2e5fa3;--lblue:#d9e2f2;--grey:#f4f6f9;--bord:#cfd6e0;--red:#c0392b;--green:#1e7e34}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -65,6 +66,8 @@ tr:nth-child(even) td{background:#fafbfd}
     <span id="userTag" style="font-size:12px;align-self:center;opacity:.9"></span>
     <button class="btn-s" onclick="exportCSV()">Export CSV</button>
     <button class="btn-s" onclick="backup()">Backup Data</button>
+    <button class="btn-s" onclick="document.getElementById('xlsxFile').click()">Import Excel</button>
+    <input type="file" id="xlsxFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="if(this.files[0]){importExcel(this.files[0]);this.value=''}">
     <button class="btn-s" onclick="signOut()">Sign out</button>
   </div>
 </header>
@@ -611,6 +614,77 @@ function printPR(){
       <div class="sig"><b>Approved by:</b><div class="line"><b>${esc((p.appr||"ODM/FDM").toUpperCase())}</b><br>Signature / Date</div></div>
     </div>`;
   window.print();
+}
+
+/* ---------- Import from Excel / CSV ---------- */
+const _S=v=>String(v==null?"":v).trim();
+const _N=v=>{const n=parseFloat(String(v).replace(/[^0-9.\-]/g,""));return isNaN(n)?null:n};
+const _D=v=>{if(v===""||v==null)return"";
+  if(typeof v==="number"){const d=new Date(Math.round((v-25569)*86400000));return isNaN(d)?"":d.toISOString().slice(0,10)}
+  const s=String(v).trim();const d=new Date(s);return isNaN(d)?s:d.toISOString().slice(0,10)};
+function _rowsOf(ws){return ws?XLSX.utils.sheet_to_json(ws,{header:1,blankrows:false,defval:""}):[]}
+function _table(ws,headerKey){
+  const rows=_rowsOf(ws);let h=-1;
+  for(let i=0;i<Math.min(rows.length,12);i++){if(rows[i].some(c=>String(c).trim().toLowerCase()===headerKey)){h=i;break}}
+  if(h<0)return{headers:[],data:[]};
+  const headers=rows[h].map(c=>String(c).trim());
+  const data=rows.slice(h+1).filter(r=>r.some(c=>String(c).trim()!==""));
+  return{headers,data};
+}
+function _idx(headers,...names){
+  for(const n of names){const i=headers.findIndex(h=>h.toLowerCase()===n.toLowerCase());if(i>=0)return i}
+  for(const n of names){const i=headers.findIndex(h=>h.toLowerCase().includes(n.toLowerCase()));if(i>=0)return i}
+  return -1;
+}
+function parseWorkbook(wb){
+  const out={projects:[],items:[],catalog:[]};
+  const findSheet=names=>{for(const n of wb.SheetNames){const l=n.toLowerCase();if(names.some(x=>l.includes(x)))return wb.Sheets[n]}return null};
+  const pr=findSheet(["project register","projects","register"]);
+  if(pr){const{headers,data}=_table(pr,"project id");
+    const c={id:_idx(headers,"Project ID"),name:_idx(headers,"Project Name","Name"),loc:_idx(headers,"Location"),
+      req:_idx(headers,"Requested By"),dept:_idx(headers,"Department"),date:_idx(headers,"Date"),stat:_idx(headers,"Status"),
+      pr:_idx(headers,"PR No"),purp:_idx(headers,"Purpose"),prep:_idx(headers,"Preparer"),head:_idx(headers,"Department Head"),appr:_idx(headers,"Approved By")};
+    data.forEach(r=>{const id=_S(r[c.id]);if(!id)return;
+      out.projects.push({id,name:_S(r[c.name]),loc:_S(r[c.loc]),req:_S(r[c.req]),dept:_S(r[c.dept]),date:_D(r[c.date]),
+        stat:_S(r[c.stat])||"Draft",pr:_S(r[c.pr]),purp:_S(r[c.purp]),prep:_S(r[c.prep]),head:_S(r[c.head]),appr:_S(r[c.appr])||"ODM/FDM"});});
+  }
+  const be=findSheet(["bom entries","bom entry","items"]);
+  if(be){const{headers,data}=_table(be,"project id");
+    const c={pid:_idx(headers,"Project ID"),cat:_idx(headers,"Category"),desc:_idx(headers,"Item Description","Description"),
+      brand:_idx(headers,"Brand"),spec:_idx(headers,"Specification"),qty:_idx(headers,"Qty"),unit:_idx(headers,"Unit"),
+      price:_idx(headers,"Unit Price"),supp:_idx(headers,"Supplier"),rem:_idx(headers,"Remarks")};
+    data.forEach(r=>{const pid=_S(r[c.pid]),desc=_S(r[c.desc]);if(!pid||!desc)return;
+      out.items.push({pid,cat:_S(r[c.cat]),desc,brand:_S(r[c.brand]),spec:_S(r[c.spec]),qty:_N(r[c.qty]),unit:_S(r[c.unit]),
+        price:_N(r[c.price]),supp:_S(r[c.supp]),rem:_S(r[c.rem])});});
+  }
+  const cd=findSheet(["items database","catalog"]);
+  if(cd){const{headers,data}=_table(cd,"description");
+    const c={desc:_idx(headers,"Description"),brand:_idx(headers,"Brand"),supp:_idx(headers,"Supplier"),
+      cat:_idx(headers,"Category"),unit:_idx(headers,"Unit"),price:_idx(headers,"Unit Price","Price")};
+    data.forEach(r=>{const desc=_S(r[c.desc]);if(!desc)return;
+      out.catalog.push({desc,brand:_S(r[c.brand]),supp:_S(r[c.supp]),cat:_S(r[c.cat]),unit:_S(r[c.unit]),price:_N(r[c.price])});});
+  }
+  return out;
+}
+async function importExcel(file){
+  if(!sb)return alert("Not connected to the database.");
+  if(typeof XLSX==="undefined")return alert("Spreadsheet library still loading — try again in a moment.");
+  let wb;
+  try{const buf=await file.arrayBuffer();wb=XLSX.read(new Uint8Array(buf),{type:"array"});}
+  catch(e){return alert("Could not read the file. Use a .xlsx or .csv.");}
+  const r=parseWorkbook(wb);
+  if(!r.projects.length&&!r.items.length&&!r.catalog.length)
+    return alert("No recognizable data found.\nExpected the IT_BOM_Entry_System workbook (sheets: Project Register, BOM Entries, Items Database).");
+  if(!confirm(`Import from "${file.name}"?\n\n• ${r.projects.length} project(s)\n• ${r.items.length} BOM item(s)\n• ${r.catalog.length} catalog item(s)\n\nProjects with the same ID are updated; items are added; new catalog items are merged.`))return;
+  try{
+    if(r.projects.length){const{error}=await sb.from("projects").upsert(r.projects.map(p=>pick(p,PCOLS)),{onConflict:"id"});if(error)throw error;}
+    const have=new Set(db.catalog.map(c=>(c.desc||"").trim().toLowerCase()));
+    const newCat=r.catalog.filter(c=>c.desc&&!have.has(c.desc.trim().toLowerCase()));
+    if(newCat.length){const{error}=await sb.from("catalog").insert(newCat.map(c=>pick(c,CCOLS)));if(error)throw error;}
+    if(r.items.length){const{error}=await sb.from("items").insert(r.items.map(i=>pick(i,ICOLS)));if(error)throw error;}
+  }catch(e){return alert("Import failed: "+(e.message||e));}
+  await loadAll();render();
+  alert(`Import complete:\n${r.projects.length} project(s), ${r.items.length} item(s), ${r.catalog.length} catalog item(s).`);
 }
 
 function exportCSV(){
