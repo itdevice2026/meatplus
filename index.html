@@ -66,9 +66,9 @@ tr:nth-child(even) td{background:#fafbfd}
     <span id="userTag" style="font-size:12px;align-self:center;opacity:.9"></span>
     <button class="btn-s" onclick="exportCSV()">Export CSV</button>
     <button class="btn-s" onclick="backup()">Backup Data</button>
-    <button class="btn-s" onclick="document.getElementById('jsonFile').click()">Restore Data</button>
+    <button class="btn-s" id="btnRestore" onclick="document.getElementById('jsonFile').click()">Restore Data</button>
     <input type="file" id="jsonFile" accept=".json" style="display:none" onchange="if(this.files[0]){restoreData(this.files[0]);this.value=''}">
-    <button class="btn-s" onclick="document.getElementById('xlsxFile').click()">Import Excel</button>
+    <button class="btn-s" id="btnImport" onclick="document.getElementById('xlsxFile').click()">Import Excel</button>
     <input type="file" id="xlsxFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="if(this.files[0]){importExcel(this.files[0]);this.value=''}">
     <button class="btn-s" onclick="signOut()">Sign out</button>
   </div>
@@ -137,7 +137,26 @@ tr:nth-child(even) td{background:#fafbfd}
   </div>
 </div>
 
-<div class="card">
+<div class="card" id="permCard" style="display:none">
+  <h2>Roles &amp; Permissions</h2>
+  <p style="font-size:12px;color:#777;margin:-6px 0 10px">Tick what each role may do. Admin always has full access. Changes apply immediately and are enforced in the database (not just the screen).</p>
+  <div style="overflow-x:auto">
+  <table><thead><tr><th>Permission</th><th style="text-align:center">Admin</th><th style="text-align:center">Dept Head</th><th style="text-align:center">Staff</th></tr></thead>
+  <tbody id="permBody"></tbody></table>
+  </div>
+  <div class="bar"><button class="btn-p" onclick="savePerms()">Save Permissions</button></div>
+</div>
+
+<div class="card" id="auditCard" style="display:none">
+  <h2>Audit Log</h2>
+  <p style="font-size:12px;color:#777;margin:-6px 0 10px">Most recent 100 actions (create / approve / delete / users / permissions / import).</p>
+  <div style="overflow-x:auto">
+  <table><thead><tr><th>When</th><th>User</th><th>Action</th><th>Detail</th></tr></thead>
+  <tbody id="auditBody"></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="itemCard">
   <h2 id="itemFormTitle">Add BOM Item</h2>
   <div class="bar" style="margin:0 0 12px">
     <button class="btn-s" id="modeBtn" onclick="toggleBulk()">Switch to Multiple Items Entry</button>
@@ -176,7 +195,7 @@ tr:nth-child(even) td{background:#fafbfd}
   </div>
 </div>
 
-<div class="card">
+<div class="card" id="catCard">
   <h2 id="catFormTitle">Items Database</h2>
   <p style="font-size:12px;color:#777;margin:-6px 0 10px">Reusable item catalog — every BOM item you save is added here automatically. Saved items auto-fill Brand/Model, Supplier, Category, Unit &amp; Unit Price when you type a matching description in a BOM line.</p>
   <div class="grid">
@@ -234,7 +253,10 @@ const STATS=["Draft","For Approval","Approved","Ordered","Delivered","Completed"
 const PCOLS=["id","name","loc","req","dept","date","stat","pr","purp","prep","head","appr"];
 const ICOLS=["pid","cat","desc","brand","spec","qty","unit","price","supp","rem"];
 const CCOLS=["desc","brand","supp","cat","unit","price"];
-let sb=null, db={projects:[],items:[],catalog:[],profiles:[]}, editP=null, editI=null, editC=null, bulkOn=false, myRole="Staff", _myId=null;
+const ROLES=["Admin","Dept Head","Staff"];
+const PERMS=[["project.create","Create projects"],["project.edit","Edit projects"],["project.approve","Approve projects"],["project.delete","Delete projects"],["item.manage","Manage BOM items"],["catalog.manage","Manage items database"],["data.import","Import / Restore data"],["users.manage","Manage users & roles"],["audit.view","View audit log"]];
+let sb=null, db={projects:[],items:[],catalog:[],profiles:[],audit:[]}, perms={}, editP=null, editI=null, editC=null, bulkOn=false, myRole="Staff", _myId=null, _myEmail="";
+function can(p){return !!(perms[myRole]&&perms[myRole][p])}
 
 const peso=n=>"₱"+Number(n||0).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -245,14 +267,17 @@ function setStatus(t,kind){const e=document.getElementById("connStatus");e.textC
 async function loadAll(){
   if(!sb)return false;
   setStatus("Loading…");
-  const [pr,it,ca,pf]=await Promise.all([
+  const [pr,it,ca,pf,rp,al]=await Promise.all([
     sb.from("projects").select("*").order("created_at"),
     sb.from("items").select("*").order("created_at"),
     sb.from("catalog").select("*").order("desc"),
-    sb.from("profiles").select("*").order("email")
+    sb.from("profiles").select("*").order("email"),
+    sb.from("role_permissions").select("*"),
+    sb.from("audit_log").select("*").order("at",{ascending:false}).limit(100)
   ]);
-  if(pr.error||it.error||ca.error||pf.error){setStatus("⚠ Connection error — check config / network","err");console.error(pr.error||it.error||ca.error||pf.error);return false}
-  db.projects=pr.data||[]; db.items=it.data||[]; db.catalog=ca.data||[]; db.profiles=pf.data||[];
+  if(pr.error||it.error||ca.error||pf.error||rp.error){setStatus("⚠ Connection error — check config / network","err");console.error(pr.error||it.error||ca.error||pf.error||rp.error);return false}
+  db.projects=pr.data||[]; db.items=it.data||[]; db.catalog=ca.data||[]; db.profiles=pf.data||[]; db.audit=al.data||[];
+  perms={}; (rp.data||[]).forEach(r=>{(perms[r.role]=perms[r.role]||{})[r.perm]=r.allowed;});
   setStatus("● Online — shared database ("+db.projects.length+" projects)","ok");
   return true;
 }
@@ -283,7 +308,7 @@ async function showApp(session){
   document.getElementById("loginWrap").style.display="none";
   document.getElementById("app").style.display="block";
   document.getElementById("topBar").style.display="flex";
-  _myId=session.user.id;
+  _myId=session.user.id;_myEmail=session.user.email;
   if(_shownFor!==session.user.id){_shownFor=session.user.id;await loadAll()}
   myRole=(db.profiles.find(p=>p.id===_myId)||{}).role||"Staff";
   document.getElementById("userTag").textContent=session.user.email+" · "+myRole;
@@ -316,6 +341,8 @@ async function saveProject(){
   const p={id:v("pId"),name:v("pName"),loc:v("pLoc"),req:v("pReq"),dept:v("pDept"),date:v("pDate"),stat:v("pStat"),pr:v("pPr"),purp:v("pPurp"),prep:v("pPrep"),head:v("pHead"),appr:v("pAppr")||"ODM/FDM"};
   if(!p.name||!p.loc)return alert("Project Name and Location are required.");
   if(!p.prep||!p.head)return alert("Preparer and Department Head are required.");
+  if(editP===null&&!can("project.create"))return alert("You don't have permission to create projects.");
+  if(editP!==null&&!can("project.edit"))return alert("You don't have permission to edit projects.");
   if(!p.id){
     const ini=s=>s.split(/\s+/).map(w=>(w.match(/[a-z0-9]/i)||[])[0]).filter(Boolean).slice(0,3).join("").toUpperCase();
     const d=(p.date||new Date().toISOString().slice(0,10)).replace(/-/g,"").slice(2);
@@ -338,6 +365,7 @@ async function saveProject(){
     ({error:err}=await sb.from("projects").insert(row));
   }
   if(err)return alert("Save failed: "+err.message);
+  await logAction(editP===null?"project.create":"project.edit",p.id+" — "+p.name);
   await loadAll();hideProjForm();render();
 }
 function editProject(i){
@@ -350,14 +378,17 @@ function editProject(i){
 }
 async function approveProject(i){
   if(!sb)return;
+  if(!can("project.approve"))return alert("You don't have permission to approve projects.");
   const p=db.projects[i];
   if(!confirm("Approve project "+p.id+" — "+p.name+"?"))return;
   const {error}=await sb.from("projects").update({stat:"Approved"}).eq("id",p.id);
   if(error)return alert("Approve failed: "+error.message);
+  await logAction("project.approve",p.id+" — "+p.name);
   await loadAll();render();
 }
 async function delProject(i){
   if(!sb)return;
+  if(!can("project.delete"))return alert("You don't have permission to delete projects.");
   const p=db.projects[i];
   if(!confirm(`Delete ${p.id} and its ${db.items.filter(x=>x.pid===p.id).length} item(s)?`))return;
   const code=prompt("Enter the security code to delete "+p.id+":");
@@ -366,6 +397,7 @@ async function delProject(i){
   await sb.from("items").delete().eq("pid",p.id);
   const {error}=await sb.from("projects").delete().eq("id",p.id);
   if(error)return alert("Delete failed: "+error.message);
+  await logAction("project.delete",p.id+" — "+p.name);
   await loadAll();render();
 }
 function clearProjForm(){
@@ -379,6 +411,7 @@ function clearProjForm(){
 
 async function saveItem(){
   if(!sb)return alert("Not connected to the database.");
+  if(!can("item.manage"))return alert("You don't have permission to manage BOM items.");
   const v=id=>document.getElementById(id).value.trim();
   const it={pid:v("iProj"),cat:v("iCat"),desc:v("iDesc"),brand:v("iBrand"),spec:v("iSpec"),
     qty:parseFloat(v("iQty")),unit:v("iUnit"),price:parseFloat(v("iPrice")),supp:v("iSupp"),rem:v("iRem")};
@@ -400,6 +433,7 @@ function editItem(i){
 }
 async function delItem(i){
   if(!sb)return;
+  if(!can("item.manage"))return alert("You don't have permission to manage BOM items.");
   if(!confirm("Delete this item?"))return;
   const {error}=await sb.from("items").delete().eq("_id",db.items[i]._id);
   if(error)return alert("Delete failed: "+error.message);
@@ -442,6 +476,7 @@ function renumberBulk(){[...document.getElementById("bulkBody").children].forEac
 function resetBulk(){document.getElementById("bulkBody").innerHTML="";for(let i=0;i<5;i++)addBulkRow()}
 async function saveBulk(){
   if(!sb)return alert("Not connected to the database.");
+  if(!can("item.manage"))return alert("You don't have permission to manage BOM items.");
   const pid=document.getElementById("bProj").value;
   if(!pid)return alert("Select a project (add one first).");
   const rows=[...document.getElementById("bulkBody").children];
@@ -490,6 +525,7 @@ async function autoCatalog(list){
 }
 async function saveCatalog(){
   if(!sb)return alert("Not connected to the database.");
+  if(!can("catalog.manage"))return alert("You don't have permission to manage the items database.");
   const v=id=>document.getElementById(id).value.trim();
   const c={desc:v("cDesc"),brand:v("cBrand"),supp:v("cSupp"),cat:v("cCat"),unit:v("cUnit"),price:parseFloat(v("cPrice"))};
   if(!c.desc)return alert("Description is required.");
@@ -508,6 +544,7 @@ function editCatalog(i){
 }
 async function delCatalog(i){
   if(!sb)return;
+  if(!can("catalog.manage"))return alert("You don't have permission to manage the items database.");
   if(!confirm("Delete this saved item?"))return;
   const {error}=await sb.from("catalog").delete().eq("_id",db.catalog[i]._id);
   if(error)return alert("Delete failed: "+error.message);
@@ -528,8 +565,26 @@ function renderUsers(){
     <td><button class="btn-p" onclick="saveProfile('${u.id}')">Save</button></td></tr>`).join("")
     :'<tr><td colspan="4" class="muted">No users yet — they appear here after first sign-in.</td></tr>';
 }
+async function logAction(action,detail){try{await sb.from("audit_log").insert({user_id:_myId,user_email:_myEmail,action,detail});}catch(e){}}
+function renderPerms(){
+  const el=document.getElementById("permBody");if(!el)return;
+  el.innerHTML=PERMS.map(([key,label])=>`<tr><td>${label}</td>`+ROLES.map(r=>`<td style="text-align:center"><input type="checkbox" id="pm_${r.replace(/\s/g,"_")}_${key}" ${perms[r]&&perms[r][key]?"checked":""} ${r==="Admin"?"disabled":""}></td>`).join("")+`</tr>`).join("");
+}
+function renderAudit(){
+  const el=document.getElementById("auditBody");if(!el)return;
+  el.innerHTML=(db.audit&&db.audit.length)?db.audit.map(a=>`<tr><td>${esc(new Date(a.at).toLocaleString("en-PH"))}</td><td>${esc(a.user_email||"")}</td><td>${esc(a.action||"")}</td><td>${esc(a.detail||"")}</td></tr>`).join(""):'<tr><td colspan="4" class="muted">No activity recorded yet.</td></tr>';
+}
+async function savePerms(){
+  if(myRole!=="Admin")return alert("Only Admins can edit permissions.");
+  const rows=[];
+  PERMS.forEach(([key])=>ROLES.forEach(r=>{const allowed=r==="Admin"?true:document.getElementById("pm_"+r.replace(/\s/g,"_")+"_"+key).checked;rows.push({role:r,perm:key,allowed});}));
+  const {error}=await sb.from("role_permissions").upsert(rows,{onConflict:"role,perm"});
+  if(error)return alert("Save failed: "+error.message);
+  await logAction("permissions.update","Updated role permissions");
+  await loadAll();render();alert("Permissions saved.");
+}
 async function addUser(){
-  if(myRole!=="Admin")return alert("Only Admins can add users.");
+  if(!can("users.manage"))return alert("You don't have permission to add users.");
   const v=id=>document.getElementById(id).value.trim();
   const email=v("nuEmail"),name=v("nuName"),role=document.getElementById("nuRole").value;
   const password=document.getElementById("nuPass").value;
@@ -544,16 +599,18 @@ async function addUser(){
     return alert("Add user failed: "+msg);
   }
   if(res.data&&res.data.error)return alert("Add user failed: "+res.data.error);
+  await logAction("user.create",email+" ("+role+")");
   ["nuName","nuEmail","nuPass"].forEach(id=>document.getElementById(id).value="");
   await loadAll();render();
   alert("User added: "+email+" ("+role+").\nThey can now sign in with the temporary password.");
 }
 async function saveProfile(id){
-  if(myRole!=="Admin")return alert("Only Admins can change users.");
+  if(!can("users.manage"))return alert("You don't have permission to change users.");
   const name=document.getElementById("un_"+id).value.trim();
   const role=document.getElementById("ur_"+id).value;
   const {error}=await sb.from("profiles").update({name,role}).eq("id",id);
   if(error)return alert("Save failed: "+error.message);
+  await logAction("user.update",(name||id)+" → "+role);
   await loadAll();
   myRole=(db.profiles.find(p=>p.id===_myId)||{}).role||myRole;
   render();
@@ -569,7 +626,7 @@ function render(){
     <td><b>${esc(p.id)}</b></td><td>${esc(p.pr||"")}</td><td>${esc(p.name)}</td><td>${esc(p.loc)}</td><td>${esc(p.req)}</td>
     <td>${esc(p.date)}</td><td><span class="tag"${p.stat==="Approved"?' style="background:var(--green);color:#fff"':""}>${esc(p.stat)}</span></td>
     <td class="num">${peso(projTotal(p.id))}</td>
-    <td class="act">${canMng()?(p.stat==="Approved"?'<button class="btn-s" disabled style="opacity:.5">Approved ✓</button>':`<button class="btn-g" onclick="approveProject(${i})">Approve</button>`):(p.stat==="Approved"?'<span class="tag" style="background:var(--green);color:#fff">Approved ✓</span>':"")}<button class="btn-s" onclick="editProject(${i})">Edit</button>${canMng()?`<button class="btn-d" onclick="delProject(${i})">Del</button>`:""}</td></tr>`).join("")
+    <td class="act">${can("project.approve")?(p.stat==="Approved"?'<button class="btn-s" disabled style="opacity:.5">Approved ✓</button>':`<button class="btn-g" onclick="approveProject(${i})">Approve</button>`):(p.stat==="Approved"?'<span class="tag" style="background:var(--green);color:#fff">Approved ✓</span>':"")}${can("project.edit")?`<button class="btn-s" onclick="editProject(${i})">Edit</button>`:""}${can("project.delete")?`<button class="btn-d" onclick="delProject(${i})">Del</button>`:""}</td></tr>`).join("")
     :'<tr><td colspan="9" class="muted">No projects yet — add one above.</td></tr>';
   const q=document.getElementById("fSearch").value.toLowerCase();
   const rows=db.items.map((t,i)=>({t,i})).filter(({t})=>(!fp||t.pid===fp)&&
@@ -593,8 +650,16 @@ function render(){
     <td class="num">${c.price!=null&&c.price!==""?peso(c.price):""}</td>
     <td class="act"><button class="btn-s" onclick="editCatalog(${i})">Edit</button><button class="btn-d" onclick="delCatalog(${i})">Del</button></td></tr>`).join("")
     :'<tr><td colspan="7" class="muted">No saved items yet — add reusable items above.</td></tr>';
-  document.getElementById("usersCard").style.display=(myRole==="Admin")?"block":"none";
-  renderUsers();
+  const setDisp=(id,show,mode)=>{const el=document.getElementById(id);if(el)el.style.display=show?(mode||""):"none";};
+  setDisp("addProjBtn",can("project.create"),"inline-block");
+  setDisp("itemCard",can("item.manage"));
+  setDisp("catCard",can("catalog.manage"));
+  setDisp("usersCard",can("users.manage"),"block");
+  setDisp("permCard",myRole==="Admin","block");
+  setDisp("auditCard",can("audit.view"),"block");
+  setDisp("btnImport",can("data.import"));
+  setDisp("btnRestore",can("data.import"));
+  renderUsers();renderPerms();renderAudit();
 }
 
 function printBOM(){
@@ -713,6 +778,7 @@ function parseWorkbook(wb){
 }
 async function importExcel(file){
   if(!sb)return alert("Not connected to the database.");
+  if(!can("data.import"))return alert("You don't have permission to import data.");
   if(typeof XLSX==="undefined")return alert("Spreadsheet library still loading — try again in a moment.");
   let wb;
   try{const buf=await file.arrayBuffer();wb=XLSX.read(new Uint8Array(buf),{type:"array"});}
@@ -721,7 +787,7 @@ async function importExcel(file){
   if(!r.projects.length&&!r.items.length&&!r.catalog.length)
     return alert("No recognizable data found.\nExpected the IT_BOM_Entry_System workbook (sheets: Project Register, BOM Entries, Items Database).");
   if(!confirm(`Import from "${file.name}"?\n\n• ${r.projects.length} project(s)\n• ${r.items.length} BOM item(s)\n• ${r.catalog.length} catalog item(s)\n\nProjects with the same ID are updated; items are added; new catalog items are merged.`))return;
-  if(await applyImport(r))alert(`Import complete:\n${r.projects.length} project(s), ${r.items.length} item(s), ${r.catalog.length} catalog item(s).`);
+  if(await applyImport(r)){await logAction("data.import",`${r.projects.length} proj, ${r.items.length} items from ${file.name}`);alert(`Import complete:\n${r.projects.length} project(s), ${r.items.length} item(s), ${r.catalog.length} catalog item(s).`);}
 }
 async function applyImport(r){
   if(!sb)return false;
@@ -736,12 +802,13 @@ async function applyImport(r){
 }
 async function restoreData(file){
   if(!sb)return alert("Not connected to the database.");
+  if(!can("data.import"))return alert("You don't have permission to restore data.");
   let d;
   try{d=JSON.parse(await file.text());}catch(e){return alert("Could not read the backup. Choose a .json backup file.");}
   if(!d||!Array.isArray(d.projects)||!Array.isArray(d.items))return alert("That doesn't look like a BOM backup (.json) file.");
   const r={projects:d.projects||[],items:d.items||[],catalog:d.catalog||[]};
   if(!confirm(`Restore from backup "${file.name}"?\n\n• ${r.projects.length} project(s)\n• ${r.items.length} item(s)\n• ${(r.catalog||[]).length} catalog item(s)\n\nProjects with the same ID are updated; items are added; new catalog items merged.`))return;
-  if(await applyImport(r))alert(`Restore complete:\n${r.projects.length} project(s), ${r.items.length} item(s).`);
+  if(await applyImport(r)){await logAction("data.restore",`${r.projects.length} proj, ${r.items.length} items from ${file.name}`);alert(`Restore complete:\n${r.projects.length} project(s), ${r.items.length} item(s).`);}
 }
 
 function exportCSV(){
