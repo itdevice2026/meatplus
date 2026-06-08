@@ -66,6 +66,8 @@ tr:nth-child(even) td{background:#fafbfd}
     <span id="userTag" style="font-size:12px;align-self:center;opacity:.9"></span>
     <button class="btn-s" onclick="exportCSV()">Export CSV</button>
     <button class="btn-s" onclick="backup()">Backup Data</button>
+    <button class="btn-s" onclick="document.getElementById('jsonFile').click()">Restore Data</button>
+    <input type="file" id="jsonFile" accept=".json" style="display:none" onchange="if(this.files[0]){restoreData(this.files[0]);this.value=''}">
     <button class="btn-s" onclick="document.getElementById('xlsxFile').click()">Import Excel</button>
     <input type="file" id="xlsxFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="if(this.files[0]){importExcel(this.files[0]);this.value=''}">
     <button class="btn-s" onclick="signOut()">Sign out</button>
@@ -692,15 +694,27 @@ async function importExcel(file){
   if(!r.projects.length&&!r.items.length&&!r.catalog.length)
     return alert("No recognizable data found.\nExpected the IT_BOM_Entry_System workbook (sheets: Project Register, BOM Entries, Items Database).");
   if(!confirm(`Import from "${file.name}"?\n\n• ${r.projects.length} project(s)\n• ${r.items.length} BOM item(s)\n• ${r.catalog.length} catalog item(s)\n\nProjects with the same ID are updated; items are added; new catalog items are merged.`))return;
+  if(await applyImport(r))alert(`Import complete:\n${r.projects.length} project(s), ${r.items.length} item(s), ${r.catalog.length} catalog item(s).`);
+}
+async function applyImport(r){
+  if(!sb)return false;
   try{
-    if(r.projects.length){const{error}=await sb.from("projects").upsert(r.projects.map(p=>pick(p,PCOLS)),{onConflict:"id"});if(error)throw error;}
+    if(r.projects&&r.projects.length){const{error}=await sb.from("projects").upsert(r.projects.map(p=>pick(p,PCOLS)),{onConflict:"id"});if(error)throw error;}
     const have=new Set(db.catalog.map(c=>(c.desc||"").trim().toLowerCase()));
-    const newCat=r.catalog.filter(c=>c.desc&&!have.has(c.desc.trim().toLowerCase()));
+    const newCat=(r.catalog||[]).filter(c=>c.desc&&!have.has(c.desc.trim().toLowerCase()));
     if(newCat.length){const{error}=await sb.from("catalog").insert(newCat.map(c=>pick(c,CCOLS)));if(error)throw error;}
-    if(r.items.length){const{error}=await sb.from("items").insert(r.items.map(i=>pick(i,ICOLS)));if(error)throw error;}
-  }catch(e){return alert("Import failed: "+(e.message||e));}
-  await loadAll();render();
-  alert(`Import complete:\n${r.projects.length} project(s), ${r.items.length} item(s), ${r.catalog.length} catalog item(s).`);
+    if(r.items&&r.items.length){const{error}=await sb.from("items").insert(r.items.map(i=>pick(i,ICOLS)));if(error)throw error;}
+  }catch(e){alert("Operation failed: "+(e.message||e));return false;}
+  await loadAll();render();return true;
+}
+async function restoreData(file){
+  if(!sb)return alert("Not connected to the database.");
+  let d;
+  try{d=JSON.parse(await file.text());}catch(e){return alert("Could not read the backup. Choose a .json backup file.");}
+  if(!d||!Array.isArray(d.projects)||!Array.isArray(d.items))return alert("That doesn't look like a BOM backup (.json) file.");
+  const r={projects:d.projects||[],items:d.items||[],catalog:d.catalog||[]};
+  if(!confirm(`Restore from backup "${file.name}"?\n\n• ${r.projects.length} project(s)\n• ${r.items.length} item(s)\n• ${(r.catalog||[]).length} catalog item(s)\n\nProjects with the same ID are updated; items are added; new catalog items merged.`))return;
+  if(await applyImport(r))alert(`Restore complete:\n${r.projects.length} project(s), ${r.items.length} item(s).`);
 }
 
 function exportCSV(){
