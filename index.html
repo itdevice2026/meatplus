@@ -664,6 +664,22 @@ function parseWorkbook(wb){
     data.forEach(r=>{const desc=_S(r[c.desc]);if(!desc)return;
       out.catalog.push({desc,brand:_S(r[c.brand]),supp:_S(r[c.supp]),cat:_S(r[c.cat]),unit:_S(r[c.unit]),price:_N(r[c.price])});});
   }
+  if(!out.projects.length&&!out.items.length&&!out.catalog.length){
+    for(const name of wb.SheetNames){
+      const rows=_rowsOf(wb.Sheets[name]);let h=-1;
+      for(let i=0;i<Math.min(rows.length,15);i++){const low=rows[i].map(c=>String(c).trim().toLowerCase());
+        if(low.includes("description")||low.includes("item description")||low.includes("project name")||low.includes("project id")){h=i;break}}
+      if(h<0)continue;
+      const headers=rows[h].map(c=>String(c).trim());
+      const data=rows.slice(h+1).filter(r=>r.some(c=>String(c).trim()!==""));
+      const x={id:_idx(headers,"Project ID"),name:_idx(headers,"Project Name"),loc:_idx(headers,"Location"),pr:_idx(headers,"PR No"),dept:_idx(headers,"Department"),date:_idx(headers,"Date"),stat:_idx(headers,"Status"),purp:_idx(headers,"Purpose"),prep:_idx(headers,"Preparer"),head:_idx(headers,"Department Head"),appr:_idx(headers,"Approved By"),cat:_idx(headers,"Category"),desc:_idx(headers,"Item Description","Description"),brand:_idx(headers,"Brand"),spec:_idx(headers,"Specification"),qty:_idx(headers,"Qty","Quantity"),unit:_idx(headers,"Unit"),price:_idx(headers,"Unit Price","Price"),supp:_idx(headers,"Supplier"),rem:_idx(headers,"Remarks")};
+      const seen={};
+      data.forEach(r=>{const id=x.id>=0?_S(r[x.id]):"";const desc=x.desc>=0?_S(r[x.desc]):"";
+        if(id&&!seen[id]){seen[id]=1;out.projects.push({id,name:_S(r[x.name]),loc:_S(r[x.loc]),req:"",dept:_S(r[x.dept]),date:_D(r[x.date]),stat:_S(r[x.stat])||"Draft",pr:_S(r[x.pr]),purp:_S(r[x.purp]),prep:_S(r[x.prep]),head:_S(r[x.head]),appr:_S(r[x.appr])||"ODM/FDM"})}
+        if(id&&desc){out.items.push({pid:id,cat:_S(r[x.cat]),desc,brand:_S(r[x.brand]),spec:_S(r[x.spec]),qty:_N(r[x.qty]),unit:_S(r[x.unit]),price:_N(r[x.price]),supp:_S(r[x.supp]),rem:_S(r[x.rem])})}});
+      if(out.items.length||out.projects.length)break;
+    }
+  }
   return out;
 }
 async function importExcel(file){
