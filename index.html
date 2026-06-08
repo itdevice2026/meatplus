@@ -123,7 +123,14 @@ tr:nth-child(even) td{background:#fafbfd}
 
 <div class="card" id="usersCard" style="display:none">
   <h2>Users &amp; Roles</h2>
-  <p style="font-size:12px;color:#777;margin:-6px 0 10px">Only Admins manage roles. Admins and Dept Heads can Approve or Delete projects. Create accounts in Supabase ▸ Authentication ▸ Users — they appear below after first sign-in.</p>
+  <p style="font-size:12px;color:#777;margin:-6px 0 10px">Admins can add users below and set roles. Admins and Dept Heads can Approve or Delete projects.</p>
+  <div class="grid" style="margin-bottom:10px">
+    <div><label>Full Name</label><input id="nuName"></div>
+    <div><label>Email *</label><input id="nuEmail" type="email" autocomplete="off"></div>
+    <div><label>Temp Password *</label><input id="nuPass" type="text" placeholder="min 6 characters" autocomplete="off"></div>
+    <div><label>Role</label><select id="nuRole"><option>Staff</option><option>Dept Head</option><option>Admin</option></select></div>
+  </div>
+  <div class="bar" style="margin:0 0 14px"><button class="btn-p" onclick="addUser()">+ Add User</button></div>
   <div style="overflow-x:auto">
   <table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Action</th></tr></thead>
   <tbody id="usersBody"></tbody></table>
@@ -520,6 +527,26 @@ function renderUsers(){
     <td><select id="ur_${u.id}"><option ${u.role==="Admin"?"selected":""}>Admin</option><option ${u.role==="Dept Head"?"selected":""}>Dept Head</option><option ${(u.role!=="Admin"&&u.role!=="Dept Head")?"selected":""}>Staff</option></select></td>
     <td><button class="btn-p" onclick="saveProfile('${u.id}')">Save</button></td></tr>`).join("")
     :'<tr><td colspan="4" class="muted">No users yet — they appear here after first sign-in.</td></tr>';
+}
+async function addUser(){
+  if(myRole!=="Admin")return alert("Only Admins can add users.");
+  const v=id=>document.getElementById(id).value.trim();
+  const email=v("nuEmail"),name=v("nuName"),role=document.getElementById("nuRole").value;
+  const password=document.getElementById("nuPass").value;
+  if(!email||!password)return alert("Email and a temporary password are required.");
+  if(password.length<6)return alert("Temporary password must be at least 6 characters.");
+  let res;
+  try{res=await sb.functions.invoke("admin-create-user",{body:{email,password,name,role}});}
+  catch(e){return alert("Add user failed: "+(e.message||e));}
+  if(res.error){
+    let msg=res.error.message||"Failed to add user.";
+    try{const ctx=await res.error.context.json();if(ctx&&ctx.error)msg=ctx.error;}catch(_){}
+    return alert("Add user failed: "+msg);
+  }
+  if(res.data&&res.data.error)return alert("Add user failed: "+res.data.error);
+  ["nuName","nuEmail","nuPass"].forEach(id=>document.getElementById(id).value="");
+  await loadAll();render();
+  alert("User added: "+email+" ("+role+").\nThey can now sign in with the temporary password.");
 }
 async function saveProfile(id){
   if(myRole!=="Admin")return alert("Only Admins can change users.");
