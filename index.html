@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IT Department BOM Entry System</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--navy:#1f3864;--blue:#2e5fa3;--lblue:#d9e2f2;--grey:#f4f6f9;--bord:#cfd6e0;--red:#c0392b;--green:#1e7e34}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;background:var(--grey)}
+header{background:var(--navy);color:#fff;padding:14px 24px;display:flex;justify-content:space-between;align-items:center}
+header h1{font-size:18px}
+header .sub{font-size:12px;opacity:.85}
+.wrap{max-width:1280px;margin:18px auto;padding:0 16px}
+.card{background:#fff;border:1px solid var(--bord);border-radius:8px;padding:16px;margin-bottom:18px}
+.card h2{font-size:15px;color:var(--navy);margin-bottom:12px;border-bottom:2px solid var(--lblue);padding-bottom:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+label{font-size:11px;font-weight:bold;color:#555;display:block;margin-bottom:3px;text-transform:uppercase}
+input,select,textarea{width:100%;padding:7px;border:1px solid var(--bord);border-radius:4px;font:inherit}
+input:focus,select:focus{outline:2px solid var(--blue)}
+button{padding:8px 16px;border:0;border-radius:4px;cursor:pointer;font:inherit;font-weight:bold}
+.btn-p{background:var(--navy);color:#fff}.btn-s{background:var(--lblue);color:var(--navy)}
+.btn-d{background:var(--red);color:#fff}.btn-g{background:var(--green);color:#fff}
+button:hover{opacity:.88}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--navy);color:#fff;padding:7px 6px;text-align:left;white-space:nowrap}
+td{padding:6px;border-bottom:1px solid var(--bord);vertical-align:top}
+tr:nth-child(even) td{background:#fafbfd}
+.num{text-align:right;white-space:nowrap}
+.total-row td{background:var(--lblue)!important;font-weight:bold}
+.tag{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold;background:var(--lblue);color:var(--navy)}
+.act{white-space:nowrap}
+.act button{padding:3px 8px;font-size:12px;margin-right:4px}
+.muted{color:#888;font-style:italic;padding:14px;text-align:center}
+.flex{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.flex>div{flex:1;min-width:140px}
+.kpi{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.kpi div{background:#fff;border:1px solid var(--bord);border-radius:8px;padding:10px 18px}
+.kpi b{display:block;font-size:20px;color:var(--navy)}
+.kpi span{font-size:11px;color:#777;text-transform:uppercase}
+/* print form */
+#printArea{display:none}
+@media print{
+ body *{visibility:hidden}
+ #printArea,#printArea *{visibility:visible}
+ #printArea{display:block;position:absolute;top:0;left:0;width:100%;padding:20px;background:#fff}
+ #printArea table{font-size:11px}
+ #printArea th{background:#1f3864!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+#bulkWrap{display:none}
+#bulkTbl input,#bulkTbl select{padding:5px;font-size:13px;min-width:70px}
+#bulkTbl td{padding:3px}
+.sigrow{display:flex;justify-content:space-between;margin-top:60px;gap:30px}
+.sig{flex:1;text-align:center}
+.sig .line{border-top:1px solid #000;margin-top:40px;padding-top:4px;font-size:11px}
+.ph{text-align:center;margin-bottom:4px}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>IT DEPARTMENT — BOM ENTRY SYSTEM</h1><div class="sub" id="connStatus">Connecting…</div></div>
+  <div class="bar" id="topBar" style="display:none">
+    <span id="userTag" style="font-size:12px;align-self:center;opacity:.9"></span>
+    <button class="btn-s" onclick="exportCSV()">Export CSV</button>
+    <button class="btn-s" onclick="backup()">Backup Data</button>
+    <button class="btn-s" onclick="signOut()">Sign out</button>
+  </div>
+</header>
+<div class="wrap" id="loginWrap" style="max-width:400px;display:none">
+  <div class="card">
+    <h2>Sign in</h2>
+    <div><label>Email</label><input id="lEmail" type="email" autocomplete="username"></div>
+    <div style="margin-top:10px"><label>Password</label><input id="lPass" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')signIn()"></div>
+    <div class="bar"><button class="btn-p" onclick="signIn()">Sign in</button></div>
+    <p id="loginMsg" style="font-size:12px;color:var(--red);margin-top:8px"></p>
+    <p style="font-size:11px;color:#888;margin-top:6px">Accounts are created by your administrator in Supabase.</p>
+  </div>
+</div>
+<div class="wrap" id="app" style="display:none">
+
+<div class="kpi">
+  <div><b id="kProj">0</b><span>Projects</span></div>
+  <div><b id="kItems">0</b><span>Line Items</span></div>
+  <div><b id="kTotal">₱0.00</b><span>Grand Total</span></div>
+</div>
+
+<div class="card" id="projCard" style="display:none">
+  <h2 id="projFormTitle">Add New Project</h2>
+  <div class="grid">
+    <div><label>Project ID</label><input id="pId" placeholder="auto: Name+Location+Date"></div>
+    <div><label>Project Name *</label><input id="pName" placeholder="Office Network Upgrade"></div>
+    <div><label>Location *</label><input id="pLoc" placeholder="Meat Plus HQ — Subic"></div>
+    <div><label>Requested By</label><input id="pReq"></div>
+    <div><label>Department</label><input id="pDept" value="IT Department"></div>
+    <div><label>Date</label><input id="pDate" type="date"></div>
+    <div><label>Status</label><select id="pStat"></select></div>
+    <div><label>Preparer *</label><input id="pPrep" placeholder="prints on BOM Form"></div>
+    <div><label>Department Head *</label><input id="pHead" placeholder="approves the BOM"></div>
+    <div><label>Approved By (PR)</label><input id="pAppr" value="ODM/FDM"></div>
+    <div><label>PR No.</label><input id="pPr" placeholder="auto-generated if blank"></div>
+    <div style="grid-column:span 2"><label>PR Purpose / Justification</label><input id="pPurp" placeholder="Reason for this purchase request"></div>
+  </div>
+  <div class="bar">
+    <button class="btn-p" onclick="saveProject()">Save Project</button>
+    <button class="btn-s" onclick="clearProjForm()">Clear</button>
+    <button class="btn-d" onclick="hideProjForm()">Cancel</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2 style="display:flex;justify-content:space-between;align-items:center">Projects
+    <button class="btn-p" id="addProjBtn" onclick="showProjForm()">+ Add New Project</button></h2>
+  <table><thead><tr><th>Project ID</th><th>PR No.</th><th>Name</th><th>Location</th><th>Requested By</th><th>Date</th><th>Status</th><th class="num">Total (₱)</th><th>Actions</th></tr></thead>
+  <tbody id="projBody"></tbody></table>
+</div>
+
+<div class="card" id="usersCard" style="display:none">
+  <h2>Users &amp; Roles</h2>
+  <p style="font-size:12px;color:#777;margin:-6px 0 10px">Only Admins manage roles. Admins and Dept Heads can Approve or Delete projects. Create accounts in Supabase ▸ Authentication ▸ Users — they appear below after first sign-in.</p>
+  <div style="overflow-x:auto">
+  <table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Action</th></tr></thead>
+  <tbody id="usersBody"></tbody></table>
+  </div>
+</div>
+
+<div class="card">
+  <h2 id="itemFormTitle">Add BOM Item</h2>
+  <div class="bar" style="margin:0 0 12px">
+    <button class="btn-s" id="modeBtn" onclick="toggleBulk()">Switch to Multiple Items Entry</button>
+  </div>
+  <div id="singleWrap">
+  <div class="grid">
+    <div><label>Project *</label><select id="iProj"></select></div>
+    <div><label>Category *</label><select id="iCat"></select></div>
+    <div><label>Item Description *</label><input id="iDesc" list="catList" oninput="catFill()"></div>
+    <div><label>Brand / Model</label><input id="iBrand"></div>
+    <div><label>Specifications</label><input id="iSpec"></div>
+    <div><label>Qty *</label><input id="iQty" type="number" min="0" step="any"></div>
+    <div><label>Unit</label><select id="iUnit"></select></div>
+    <div><label>Unit Price (₱) *</label><input id="iPrice" type="number" min="0" step="any"></div>
+    <div><label>Supplier</label><input id="iSupp"></div>
+    <div><label>Remarks</label><input id="iRem"></div>
+  </div>
+  <div class="bar">
+    <button class="btn-p" onclick="saveItem()">Save Item</button>
+    <button class="btn-s" onclick="clearItemForm()">Clear</button>
+  </div>
+  </div>
+  <div id="bulkWrap">
+    <div class="flex" style="margin-bottom:10px">
+      <div style="max-width:260px"><label>Project *</label><select id="bProj"></select></div>
+    </div>
+    <div style="overflow-x:auto">
+    <table id="bulkTbl"><thead><tr><th>#</th><th>Category</th><th>Description *</th><th>Brand/Model</th><th>Specifications</th><th>Qty *</th><th>Unit</th><th>Unit Price (₱) *</th><th>Supplier</th><th>Remarks</th><th></th></tr></thead>
+    <tbody id="bulkBody"></tbody></table>
+    </div>
+    <div class="bar">
+      <button class="btn-s" onclick="addBulkRow()">+ Add Row</button>
+      <button class="btn-p" onclick="saveBulk()">Save All Items</button>
+      <button class="btn-s" onclick="resetBulk()">Clear Rows</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2 id="catFormTitle">Items Database</h2>
+  <p style="font-size:12px;color:#777;margin:-6px 0 10px">Reusable item catalog — every BOM item you save is added here automatically. Saved items auto-fill Brand/Model, Supplier, Category, Unit &amp; Unit Price when you type a matching description in a BOM line.</p>
+  <div class="grid">
+    <div><label>Description *</label><input id="cDesc"></div>
+    <div><label>Brand / Model</label><input id="cBrand"></div>
+    <div><label>Supplier</label><input id="cSupp"></div>
+    <div><label>Category</label><select id="cCat"></select></div>
+    <div><label>Unit</label><select id="cUnit"></select></div>
+    <div><label>Default Unit Price (₱)</label><input id="cPrice" type="number" min="0" step="any"></div>
+  </div>
+  <div class="bar">
+    <button class="btn-p" onclick="saveCatalog()">Save Item</button>
+    <button class="btn-s" onclick="clearCatForm()">Clear</button>
+  </div>
+  <div style="overflow-x:auto;margin-top:12px">
+  <table><thead><tr><th>Description</th><th>Brand/Model</th><th>Supplier</th><th>Category</th><th>Unit</th><th class="num">Unit Price</th><th>Actions</th></tr></thead>
+  <tbody id="catBody"></tbody></table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>BOM Items</h2>
+  <div class="flex" style="margin-bottom:10px">
+    <div><label>Filter by Project</label><select id="fProj" onchange="render()"></select></div>
+    <div><label>Search</label><input id="fSearch" oninput="render()" placeholder="description, brand, supplier..."></div>
+    <div style="flex:0"><button class="btn-g" onclick="printBOM()">Print BOM Form</button></div>
+    <div style="flex:0"><button class="btn-g" onclick="printPR()">Print Purchase Request</button></div>
+  </div>
+  <div style="overflow-x:auto">
+  <table><thead><tr><th>#</th><th>Project</th><th>Category</th><th>Description</th><th>Brand/Model</th><th>Specs</th><th class="num">Qty</th><th>Unit</th><th class="num">Unit Price</th><th class="num">Total</th><th>Supplier</th><th>Remarks</th><th>Actions</th></tr></thead>
+  <tbody id="itemBody"></tbody></table>
+  </div>
+</div>
+
+</div>
+
+<datalist id="catList"></datalist>
+<div id="printArea"></div>
+
+<script>
+/* ============================================================
+   SUPABASE CONFIG  —  EDIT THESE TWO LINES
+   Get them from: Supabase dashboard ▸ Project Settings ▸ API
+   (Project URL  and  Project API keys ▸ "anon public")
+   ============================================================ */
+const SUPABASE_URL = "https://emkcwukiqxnvcbhkjiqz.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVta2N3dWtpcXhudmNiaGtqaXF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4OTk5NzksImV4cCI6MjA5NjQ3NTk3OX0.93Ark2Jb8s-kfVO0_T_SMjA6CXWFel6fLNHzrt9Pejk";
+/* ============================================================ */
+
+/* Security code required to DELETE a project — change as needed */
+const DELETE_CODE = "admin";
+const CATS=["Hardware","Software","Network Equipment","Server & Storage","Cabling & Accessories","Peripherals","Security / CCTV","Printing & Scanning","Consumables","Services","Others"];
+const UNITS=["pc","unit","set","lot","box","roll","meter","pack","license","pair","month"];
+const STATS=["Draft","For Approval","Approved","Ordered","Delivered","Completed","Cancelled"];
+const PCOLS=["id","name","loc","req","dept","date","stat","pr","purp","prep","head","appr"];
+const ICOLS=["pid","cat","desc","brand","spec","qty","unit","price","supp","rem"];
+const CCOLS=["desc","brand","supp","cat","unit","price"];
+let sb=null, db={projects:[],items:[],catalog:[],profiles:[]}, editP=null, editI=null, editC=null, bulkOn=false, myRole="Staff", _myId=null;
+
+const peso=n=>"₱"+Number(n||0).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fill=(id,arr,blank)=>{const s=document.getElementById(id);s.innerHTML=(blank?`<option value="">${blank}</option>`:"")+arr.map(v=>`<option>${esc(v)}</option>`).join("")};
+const pick=(o,cols)=>{const r={};cols.forEach(k=>r[k]=(o[k]===undefined||o[k]==="")?null:o[k]);return r};
+function setStatus(t,kind){const e=document.getElementById("connStatus");e.textContent=t;e.style.color=kind==="err"?"#ffd2d2":kind==="ok"?"#bfe3c0":"#fff"}
+
+async function loadAll(){
+  if(!sb)return false;
+  setStatus("Loading…");
+  const [pr,it,ca,pf]=await Promise.all([
+    sb.from("projects").select("*").order("created_at"),
+    sb.from("items").select("*").order("created_at"),
+    sb.from("catalog").select("*").order("desc"),
+    sb.from("profiles").select("*").order("email")
+  ]);
+  if(pr.error||it.error||ca.error||pf.error){setStatus("⚠ Connection error — check config / network","err");console.error(pr.error||it.error||ca.error||pf.error);return false}
+  db.projects=pr.data||[]; db.items=it.data||[]; db.catalog=ca.data||[]; db.profiles=pf.data||[];
+  setStatus("● Online — shared database ("+db.projects.length+" projects)","ok");
+  return true;
+}
+
+async function init(){
+  fill("pStat",STATS);fill("iCat",CATS);fill("iUnit",UNITS);fill("cCat",CATS);fill("cUnit",UNITS);
+  document.getElementById("pDate").valueAsDate=new Date();
+  if(SUPABASE_URL.includes("YOUR-PROJECT")||SUPABASE_ANON_KEY.includes("YOUR-ANON")){
+    setStatus("⚠ Not configured — open this file and set SUPABASE_URL & KEY","err");
+    showLogin();document.getElementById("loginMsg").textContent="App not configured yet — set SUPABASE_URL and KEY in the file.";
+    return;
+  }
+  try{
+    sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+    sb.auth.onAuthStateChange((_e,session)=>{session?showApp(session):showLogin()});
+    const {data:{session}}=await sb.auth.getSession();
+    session?await showApp(session):showLogin();
+  }catch(e){setStatus("⚠ Could not connect — check config","err");console.error(e);showLogin()}
+}
+function showLogin(){
+  document.getElementById("app").style.display="none";
+  document.getElementById("topBar").style.display="none";
+  document.getElementById("loginWrap").style.display="block";
+  setStatus("Sign in to continue");
+}
+let _shownFor=null;
+async function showApp(session){
+  document.getElementById("loginWrap").style.display="none";
+  document.getElementById("app").style.display="block";
+  document.getElementById("topBar").style.display="flex";
+  _myId=session.user.id;
+  if(_shownFor!==session.user.id){_shownFor=session.user.id;await loadAll()}
+  myRole=(db.profiles.find(p=>p.id===_myId)||{}).role||"Staff";
+  document.getElementById("userTag").textContent=session.user.email+" · "+myRole;
+  render();
+}
+async function signIn(){
+  if(!sb)return;
+  const email=document.getElementById("lEmail").value.trim();
+  const pass=document.getElementById("lPass").value;
+  const msg=document.getElementById("loginMsg");msg.textContent="";
+  if(!email||!pass){msg.textContent="Enter email and password.";return}
+  const {error}=await sb.auth.signInWithPassword({email,password:pass});
+  if(error){msg.textContent=error.message;return}
+  document.getElementById("lPass").value="";
+}
+async function signOut(){if(sb){await sb.auth.signOut()}_shownFor=null;showLogin()}
+function projTotal(pid){return db.items.filter(i=>i.pid===pid).reduce((s,i)=>s+i.qty*i.price,0)}
+
+function showProjForm(){
+  clearProjForm();
+  document.getElementById("projCard").style.display="block";
+  document.getElementById("pName").focus();
+  document.getElementById("projCard").scrollIntoView({behavior:"smooth"});
+}
+function hideProjForm(){clearProjForm();document.getElementById("projCard").style.display="none"}
+
+async function saveProject(){
+  if(!sb)return alert("Not connected to the database. Set SUPABASE_URL and KEY in this file.");
+  const v=id=>document.getElementById(id).value.trim();
+  const p={id:v("pId"),name:v("pName"),loc:v("pLoc"),req:v("pReq"),dept:v("pDept"),date:v("pDate"),stat:v("pStat"),pr:v("pPr"),purp:v("pPurp"),prep:v("pPrep"),head:v("pHead"),appr:v("pAppr")||"ODM/FDM"};
+  if(!p.name||!p.loc)return alert("Project Name and Location are required.");
+  if(!p.prep||!p.head)return alert("Preparer and Department Head are required.");
+  if(!p.id){
+    const ini=s=>s.split(/\s+/).map(w=>(w.match(/[a-z0-9]/i)||[])[0]).filter(Boolean).slice(0,3).join("").toUpperCase();
+    const d=(p.date||new Date().toISOString().slice(0,10)).replace(/-/g,"").slice(2);
+    const base=ini(p.name)+"-"+ini(p.loc)+"-"+d;
+    p.id=base;let n=2;
+    while(db.projects.some((x,xi)=>x.id===p.id&&xi!==editP)){p.id=base+"-"+n;n++}
+  }
+  if(editP===null&&db.projects.some(x=>x.id===p.id))return alert("Project ID already exists.");
+  if(!p.pr){
+    const yr=new Date().getFullYear();let n=db.projects.length+1,pn;
+    do{pn="PR-"+yr+"-"+String(n).padStart(3,"0");n++}while(db.projects.some((x,xi)=>x.pr===pn&&xi!==editP));
+    p.pr=pn;
+  }
+  const row=pick(p,PCOLS);let err;
+  if(editP!==null){
+    const oldId=db.projects[editP].id;
+    if(oldId!==p.id){({error:err}=await sb.from("items").update({pid:p.id}).eq("pid",oldId))}
+    if(!err)({error:err}=await sb.from("projects").update(row).eq("id",oldId));
+  }else{
+    ({error:err}=await sb.from("projects").insert(row));
+  }
+  if(err)return alert("Save failed: "+err.message);
+  await loadAll();hideProjForm();render();
+}
+function editProject(i){
+  const p=db.projects[i];
+  document.getElementById("projCard").style.display="block";
+  editP=i;
+  ["pId","pName","pLoc","pReq","pDept","pDate","pStat","pPr","pPurp","pPrep","pHead","pAppr"].forEach((id,j)=>document.getElementById(id).value=[p.id,p.name,p.loc,p.req,p.dept,p.date,p.stat,p.pr||"",p.purp||"",p.prep||"",p.head||"",p.appr||"ODM/FDM"][j]);
+  document.getElementById("projFormTitle").textContent="Edit Project — "+p.id;
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+async function approveProject(i){
+  if(!sb)return;
+  const p=db.projects[i];
+  if(!confirm("Approve project "+p.id+" — "+p.name+"?"))return;
+  const {error}=await sb.from("projects").update({stat:"Approved"}).eq("id",p.id);
+  if(error)return alert("Approve failed: "+error.message);
+  await loadAll();render();
+}
+async function delProject(i){
+  if(!sb)return;
+  const p=db.projects[i];
+  if(!confirm(`Delete ${p.id} and its ${db.items.filter(x=>x.pid===p.id).length} item(s)?`))return;
+  const code=prompt("Enter the security code to delete "+p.id+":");
+  if(code===null)return;
+  if(code!==DELETE_CODE)return alert("Incorrect security code. Deletion cancelled.");
+  await sb.from("items").delete().eq("pid",p.id);
+  const {error}=await sb.from("projects").delete().eq("id",p.id);
+  if(error)return alert("Delete failed: "+error.message);
+  await loadAll();render();
+}
+function clearProjForm(){
+  editP=null;["pId","pName","pLoc","pReq","pPr","pPurp","pPrep","pHead"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("pAppr").value="ODM/FDM";
+  document.getElementById("pDept").value="IT Department";
+  document.getElementById("pDate").valueAsDate=new Date();
+  document.getElementById("pStat").value=STATS[0];
+  document.getElementById("projFormTitle").textContent="Add New Project";
+}
+
+async function saveItem(){
+  if(!sb)return alert("Not connected to the database.");
+  const v=id=>document.getElementById(id).value.trim();
+  const it={pid:v("iProj"),cat:v("iCat"),desc:v("iDesc"),brand:v("iBrand"),spec:v("iSpec"),
+    qty:parseFloat(v("iQty")),unit:v("iUnit"),price:parseFloat(v("iPrice")),supp:v("iSupp"),rem:v("iRem")};
+  if(!it.pid)return alert("Select a project (add one first).");
+  if(!it.desc||isNaN(it.qty)||isNaN(it.price))return alert("Description, Qty and Unit Price are required.");
+  let err;
+  if(editI!==null)({error:err}=await sb.from("items").update(pick(it,ICOLS)).eq("_id",db.items[editI]._id));
+  else ({error:err}=await sb.from("items").insert(pick(it,ICOLS)));
+  if(err)return alert("Save failed: "+err.message);
+  await autoCatalog([it]);
+  await loadAll();clearItemForm();render();
+}
+function editItem(i){
+  const t=db.items[i];editI=i;
+  ["iProj","iCat","iDesc","iBrand","iSpec","iQty","iUnit","iPrice","iSupp","iRem"].forEach((id,j)=>
+    document.getElementById(id).value=[t.pid,t.cat,t.desc,t.brand,t.spec,t.qty,t.unit,t.price,t.supp,t.rem][j]);
+  document.getElementById("itemFormTitle").textContent="Edit BOM Item";
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+async function delItem(i){
+  if(!sb)return;
+  if(!confirm("Delete this item?"))return;
+  const {error}=await sb.from("items").delete().eq("_id",db.items[i]._id);
+  if(error)return alert("Delete failed: "+error.message);
+  await loadAll();render();
+}
+function clearItemForm(){
+  editI=null;["iDesc","iBrand","iSpec","iQty","iPrice","iSupp","iRem"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("itemFormTitle").textContent="Add BOM Item";
+}
+
+function toggleBulk(){
+  bulkOn=!bulkOn;
+  document.getElementById("singleWrap").style.display=bulkOn?"none":"block";
+  document.getElementById("bulkWrap").style.display=bulkOn?"block":"none";
+  document.getElementById("modeBtn").textContent=bulkOn?"Switch to Single Item Entry":"Switch to Multiple Items Entry";
+  document.getElementById("itemFormTitle").textContent=bulkOn?"Add Multiple BOM Items":"Add BOM Item";
+  if(bulkOn){syncBulkProj();if(!document.getElementById("bulkBody").children.length)resetBulk()}
+}
+function syncBulkProj(){
+  const cur=document.getElementById("bProj").value;
+  document.getElementById("bProj").innerHTML=db.projects.map(p=>`<option ${p.id===cur?"selected":""}>${esc(p.id)}</option>`).join("");
+}
+function addBulkRow(){
+  const tb=document.getElementById("bulkBody");
+  const tr=document.createElement("tr");
+  tr.innerHTML=`<td>${tb.children.length+1}</td>
+    <td><select class="bCat">${CATS.map(c=>`<option>${esc(c)}</option>`).join("")}</select></td>
+    <td><input class="bDesc" list="catList" oninput="catFillRow(this)" style="min-width:160px"></td>
+    <td><input class="bBrand"></td>
+    <td><input class="bSpec" style="min-width:140px"></td>
+    <td><input class="bQty" type="number" min="0" step="any" style="min-width:55px;width:65px"></td>
+    <td><select class="bUnit">${UNITS.map(u=>`<option>${esc(u)}</option>`).join("")}</select></td>
+    <td><input class="bPrice" type="number" min="0" step="any" style="min-width:90px;width:100px"></td>
+    <td><input class="bSupp"></td>
+    <td><input class="bRem"></td>
+    <td><button class="btn-d" onclick="this.closest('tr').remove();renumberBulk()" title="Remove row">×</button></td>`;
+  tb.appendChild(tr);
+}
+function renumberBulk(){[...document.getElementById("bulkBody").children].forEach((tr,i)=>tr.cells[0].textContent=i+1)}
+function resetBulk(){document.getElementById("bulkBody").innerHTML="";for(let i=0;i<5;i++)addBulkRow()}
+async function saveBulk(){
+  if(!sb)return alert("Not connected to the database.");
+  const pid=document.getElementById("bProj").value;
+  if(!pid)return alert("Select a project (add one first).");
+  const rows=[...document.getElementById("bulkBody").children];
+  const items=[];const bad=[];
+  rows.forEach((tr,i)=>{
+    const g=cls=>tr.querySelector("."+cls).value.trim();
+    const it={pid,cat:g("bCat"),desc:g("bDesc"),brand:g("bBrand"),spec:g("bSpec"),
+      qty:parseFloat(g("bQty")),unit:g("bUnit"),price:parseFloat(g("bPrice")),supp:g("bSupp"),rem:g("bRem")};
+    const empty=!it.desc&&isNaN(it.qty)&&isNaN(it.price)&&!it.brand&&!it.spec;
+    if(empty)return;
+    if(!it.desc||isNaN(it.qty)||isNaN(it.price)){bad.push(i+1);return}
+    items.push(pick(it,ICOLS));
+  });
+  if(bad.length)return alert("Row(s) "+bad.join(", ")+": Description, Qty and Unit Price are required.");
+  if(!items.length)return alert("No items to save — fill in at least one row.");
+  const {error}=await sb.from("items").insert(items);
+  if(error)return alert("Save failed: "+error.message);
+  await autoCatalog(items);
+  await loadAll();resetBulk();render();
+  alert(items.length+" item(s) added to "+pid+".");
+}
+function catMatch(desc){const d=(desc||"").trim().toLowerCase();return db.catalog.find(c=>(c.desc||"").trim().toLowerCase()===d)}
+function refreshCatList(){const dl=document.getElementById("catList");if(dl)dl.innerHTML=db.catalog.map(c=>`<option value="${esc(c.desc)}">`).join("")}
+function catFill(){
+  const c=catMatch(document.getElementById("iDesc").value);if(!c)return;
+  if(c.brand)document.getElementById("iBrand").value=c.brand;
+  if(c.supp)document.getElementById("iSupp").value=c.supp;
+  if(c.cat)document.getElementById("iCat").value=c.cat;
+  if(c.unit)document.getElementById("iUnit").value=c.unit;
+  if(c.price!=null&&c.price!=="")document.getElementById("iPrice").value=c.price;
+}
+function catFillRow(inp){
+  const c=catMatch(inp.value);if(!c)return;const tr=inp.closest("tr");
+  const set=(cls,val)=>{if(val!=null&&val!=="")tr.querySelector("."+cls).value=val};
+  set("bBrand",c.brand);set("bSupp",c.supp);set("bCat",c.cat);set("bUnit",c.unit);set("bPrice",c.price);
+}
+async function autoCatalog(list){
+  if(!sb)return;
+  const seen={};
+  list.forEach(it=>{if(it.desc)seen[it.desc.trim().toLowerCase()]={desc:it.desc,brand:it.brand,supp:it.supp,cat:it.cat,unit:it.unit,price:it.price}});
+  for(const k in seen){
+    const ex=catMatch(seen[k].desc),row=pick(seen[k],CCOLS);
+    if(ex)await sb.from("catalog").update(row).eq("_id",ex._id);
+    else await sb.from("catalog").insert(row);
+  }
+}
+async function saveCatalog(){
+  if(!sb)return alert("Not connected to the database.");
+  const v=id=>document.getElementById(id).value.trim();
+  const c={desc:v("cDesc"),brand:v("cBrand"),supp:v("cSupp"),cat:v("cCat"),unit:v("cUnit"),price:parseFloat(v("cPrice"))};
+  if(!c.desc)return alert("Description is required.");
+  if(isNaN(c.price))c.price=null;
+  let err;
+  if(editC!==null)({error:err}=await sb.from("catalog").update(pick(c,CCOLS)).eq("_id",db.catalog[editC]._id));
+  else ({error:err}=await sb.from("catalog").insert(pick(c,CCOLS)));
+  if(err)return alert("Save failed: "+err.message);
+  await loadAll();clearCatForm();render();
+}
+function editCatalog(i){
+  const c=db.catalog[i];editC=i;
+  ["cDesc","cBrand","cSupp","cCat","cUnit","cPrice"].forEach((id,j)=>document.getElementById(id).value=[c.desc,c.brand,c.supp,c.cat,c.unit,(c.price!=null?c.price:"")][j]);
+  document.getElementById("catFormTitle").textContent="Edit Saved Item";
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+async function delCatalog(i){
+  if(!sb)return;
+  if(!confirm("Delete this saved item?"))return;
+  const {error}=await sb.from("catalog").delete().eq("_id",db.catalog[i]._id);
+  if(error)return alert("Delete failed: "+error.message);
+  await loadAll();render();
+}
+function clearCatForm(){
+  editC=null;["cDesc","cBrand","cSupp","cPrice"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("cCat").selectedIndex=0;document.getElementById("cUnit").selectedIndex=0;
+  document.getElementById("catFormTitle").textContent="Items Database";
+}
+function canMng(){return myRole==="Admin"||myRole==="Dept Head"}
+function renderUsers(){
+  const tb=document.getElementById("usersBody");if(!tb)return;
+  tb.innerHTML=db.profiles.length?db.profiles.map(u=>`<tr>
+    <td><input id="un_${u.id}" value="${esc(u.name||"")}" style="min-width:140px"></td>
+    <td>${esc(u.email||"")}</td>
+    <td><select id="ur_${u.id}"><option ${u.role==="Admin"?"selected":""}>Admin</option><option ${u.role==="Dept Head"?"selected":""}>Dept Head</option><option ${(u.role!=="Admin"&&u.role!=="Dept Head")?"selected":""}>Staff</option></select></td>
+    <td><button class="btn-p" onclick="saveProfile('${u.id}')">Save</button></td></tr>`).join("")
+    :'<tr><td colspan="4" class="muted">No users yet — they appear here after first sign-in.</td></tr>';
+}
+async function saveProfile(id){
+  if(myRole!=="Admin")return alert("Only Admins can change users.");
+  const name=document.getElementById("un_"+id).value.trim();
+  const role=document.getElementById("ur_"+id).value;
+  const {error}=await sb.from("profiles").update({name,role}).eq("id",id);
+  if(error)return alert("Save failed: "+error.message);
+  await loadAll();
+  myRole=(db.profiles.find(p=>p.id===_myId)||{}).role||myRole;
+  render();
+}
+function render(){
+  if(bulkOn)syncBulkProj();
+  const fp=document.getElementById("fProj").value||"";
+  fill("iProj",db.projects.map(p=>p.id));
+  const fSel=document.getElementById("fProj");
+  fSel.innerHTML='<option value="">All projects</option>'+db.projects.map(p=>`<option ${p.id===fp?"selected":""}>${esc(p.id)}</option>`).join("");
+  const pb=document.getElementById("projBody");
+  pb.innerHTML=db.projects.length?db.projects.map((p,i)=>`<tr>
+    <td><b>${esc(p.id)}</b></td><td>${esc(p.pr||"")}</td><td>${esc(p.name)}</td><td>${esc(p.loc)}</td><td>${esc(p.req)}</td>
+    <td>${esc(p.date)}</td><td><span class="tag"${p.stat==="Approved"?' style="background:var(--green);color:#fff"':""}>${esc(p.stat)}</span></td>
+    <td class="num">${peso(projTotal(p.id))}</td>
+    <td class="act">${canMng()?(p.stat==="Approved"?'<button class="btn-s" disabled style="opacity:.5">Approved ✓</button>':`<button class="btn-g" onclick="approveProject(${i})">Approve</button>`):(p.stat==="Approved"?'<span class="tag" style="background:var(--green);color:#fff">Approved ✓</span>':"")}<button class="btn-s" onclick="editProject(${i})">Edit</button>${canMng()?`<button class="btn-d" onclick="delProject(${i})">Del</button>`:""}</td></tr>`).join("")
+    :'<tr><td colspan="9" class="muted">No projects yet — add one above.</td></tr>';
+  const q=document.getElementById("fSearch").value.toLowerCase();
+  const rows=db.items.map((t,i)=>({t,i})).filter(({t})=>(!fp||t.pid===fp)&&
+    (!q||[t.desc,t.brand,t.supp,t.cat,t.spec].join(" ").toLowerCase().includes(q)));
+  let sum=0;
+  const ib=document.getElementById("itemBody");
+  ib.innerHTML=rows.length?rows.map(({t,i},n)=>{const tot=t.qty*t.price;sum+=tot;return`<tr>
+    <td>${n+1}</td><td><b>${esc(t.pid)}</b></td><td>${esc(t.cat)}</td><td>${esc(t.desc)}</td><td>${esc(t.brand)}</td><td>${esc(t.spec)}</td>
+    <td class="num">${t.qty}</td><td>${esc(t.unit)}</td><td class="num">${peso(t.price)}</td><td class="num"><b>${peso(tot)}</b></td>
+    <td>${esc(t.supp)}</td><td>${esc(t.rem)}</td>
+    <td class="act"><button class="btn-s" onclick="editItem(${i})">Edit</button><button class="btn-d" onclick="delItem(${i})">Del</button></td></tr>`}).join("")
+    +`<tr class="total-row"><td colspan="9" style="text-align:right">TOTAL</td><td class="num">${peso(sum)}</td><td colspan="3"></td></tr>`
+    :'<tr><td colspan="13" class="muted">No items found.</td></tr>';
+  document.getElementById("kProj").textContent=db.projects.length;
+  document.getElementById("kItems").textContent=db.items.length;
+  document.getElementById("kTotal").textContent=peso(db.items.reduce((s,i)=>s+i.qty*i.price,0));
+  refreshCatList();
+  const cb=document.getElementById("catBody");
+  cb.innerHTML=db.catalog.length?db.catalog.map((c,i)=>`<tr>
+    <td>${esc(c.desc)}</td><td>${esc(c.brand)}</td><td>${esc(c.supp)}</td><td>${esc(c.cat)}</td><td>${esc(c.unit)}</td>
+    <td class="num">${c.price!=null&&c.price!==""?peso(c.price):""}</td>
+    <td class="act"><button class="btn-s" onclick="editCatalog(${i})">Edit</button><button class="btn-d" onclick="delCatalog(${i})">Del</button></td></tr>`).join("")
+    :'<tr><td colspan="7" class="muted">No saved items yet — add reusable items above.</td></tr>';
+  document.getElementById("usersCard").style.display=(myRole==="Admin")?"block":"none";
+  renderUsers();
+}
+
+function printBOM(){
+  const fp=document.getElementById("fProj").value;
+  if(!fp)return alert("Select a project in the filter first.");
+  const p=db.projects.find(x=>x.id===fp);
+  const items=db.items.filter(i=>i.pid===fp);
+  let sum=0;
+  const rows=items.map((t,n)=>{const tot=t.qty*t.price;sum+=tot;return`<tr>
+    <td>${n+1}</td><td>${esc(t.cat)}</td><td>${esc(t.desc)}</td><td>${esc(t.brand)}</td><td>${esc(t.spec)}</td>
+    <td class="num">${t.qty}</td><td>${esc(t.unit)}</td><td class="num">${peso(t.price)}</td><td class="num">${peso(tot)}</td><td>${esc(t.supp)}</td></tr>`}).join("");
+  document.getElementById("printArea").innerHTML=`
+    <h2 class="ph">IT DEPARTMENT</h2><h3 class="ph">BILL OF MATERIALS</h3>
+    <table style="margin:14px 0 10px;border:none"><tr>
+      <td style="border:none"><b>Project ID:</b> ${esc(p.id)}<br><b>Project Name:</b> ${esc(p.name)}<br><b>Location:</b> ${esc(p.loc)}</td>
+      <td style="border:none;text-align:right"><b>Date:</b> ${new Date().toLocaleDateString("en-PH")}<br><b>Status:</b> ${esc(p.stat)}<br><b>Requested By:</b> ${esc(p.req)}</td></tr></table>
+    <table><thead><tr><th>No.</th><th>Category</th><th>Description</th><th>Brand/Model</th><th>Specifications</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th>Total</th><th>Supplier</th></tr></thead>
+    <tbody>${rows}<tr class="total-row"><td colspan="8" style="text-align:right"><b>PROJECT TOTAL</b></td><td class="num"><b>${peso(sum)}</b></td><td></td></tr></tbody></table>
+    <div class="sigrow" style="max-width:75%;margin-left:auto;margin-right:auto">
+      <div class="sig"><b>Prepared by:</b><div class="line"><b>${esc((p.prep||"").toUpperCase())||"&nbsp;"}</b><br>Preparer — Signature / Date</div></div>
+      <div class="sig"><b>Approved by:</b><div class="line"><b>${esc((p.head||"").toUpperCase())||"&nbsp;"}</b><br>Department Head — Signature / Date</div></div>
+    </div>`;
+  window.print();
+}
+
+function printPR(){
+  const fp=document.getElementById("fProj").value;
+  if(!fp)return alert("Select a project in the filter first.");
+  const p=db.projects.find(x=>x.id===fp);
+  const items=db.items.filter(i=>i.pid===fp);
+  let sum=0;
+  const rows=items.map((t,n)=>{const tot=t.qty*t.price;sum+=tot;return`<tr>
+    <td>${n+1}</td><td>${esc(t.cat)}</td><td>${esc(t.desc)}</td><td>${esc(t.brand)}</td><td>${esc(t.spec)}</td>
+    <td class="num">${t.qty}</td><td>${esc(t.unit)}</td><td class="num">${peso(t.price)}</td><td class="num">${peso(tot)}</td><td>${esc(t.supp)}</td></tr>`}).join("");
+  document.getElementById("printArea").innerHTML=`
+    <h2 class="ph">IT DEPARTMENT</h2><h3 class="ph">PURCHASE REQUEST</h3>
+    <table style="margin:14px 0 10px;border:none"><tr>
+      <td style="border:none"><b>Project ID:</b> ${esc(p.id)}<br><b>Project Name:</b> ${esc(p.name)}<br><b>Location:</b> ${esc(p.loc)}<br><b>Department:</b> ${esc(p.dept)}</td>
+      <td style="border:none;text-align:right"><b>PR No.:</b> ${esc(p.pr||"")}<br><b>Date:</b> ${new Date().toLocaleDateString("en-PH")}<br><b>Requested By:</b> ${esc(p.req)}<br><b>Status:</b> ${esc(p.stat)}</td></tr></table>
+    <p style="margin:0 0 10px"><b>Purpose / Justification:</b> ${esc(p.purp||"")}</p>
+    <table><thead><tr><th>No.</th><th>Category</th><th>Description</th><th>Brand/Model</th><th>Specifications</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th>Total</th><th>Supplier</th></tr></thead>
+    <tbody>${rows}<tr class="total-row"><td colspan="8" style="text-align:right"><b>TOTAL AMOUNT REQUESTED</b></td><td class="num"><b>${peso(sum)}</b></td><td></td></tr></tbody></table>
+    <div class="sigrow">
+      <div class="sig"><b>Prepared by:</b><div class="line"><b>${esc((p.prep||"").toUpperCase())||"&nbsp;"}</b><br>Preparer — Signature / Date</div></div>
+      <div class="sig"><b>Recommended by:</b><div class="line"><b>${esc((p.head||"").toUpperCase())||"&nbsp;"}</b><br>Department Head — Signature / Date</div></div>
+      <div class="sig"><b>Approved by:</b><div class="line"><b>${esc((p.appr||"ODM/FDM").toUpperCase())}</b><br>Signature / Date</div></div>
+    </div>`;
+  window.print();
+}
+
+function exportCSV(){
+  const head=["Project ID","PR No.","Project Name","Location","Category","Description","Brand/Model","Specifications","Qty","Unit","Unit Price","Total","Supplier","Remarks"];
+  const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+  const lines=[head.map(q).join(",")];
+  db.items.forEach(t=>{const p=db.projects.find(x=>x.id===t.pid)||{};
+    lines.push([t.pid,p.pr,p.name,p.loc,t.cat,t.desc,t.brand,t.spec,t.qty,t.unit,t.price,t.qty*t.price,t.supp,t.rem].map(q).join(","))});
+  dl(new Blob(["﻿"+lines.join("\r\n")],{type:"text/csv"}),"BOM_Export_"+new Date().toISOString().slice(0,10)+".csv");
+}
+function backup(){dl(new Blob([JSON.stringify(db,null,1)],{type:"application/json"}),"BOM_Backup_"+new Date().toISOString().slice(0,10)+".json")}
+function dl(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href)}
+init();
+</script>
+</body>
+</html>
