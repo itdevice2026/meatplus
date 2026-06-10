@@ -121,6 +121,24 @@ tr:nth-child(even) td{background:#fafbfd}
   <tbody id="projBody"></tbody></table>
 </div>
 
+<div class="card" id="quoteCard">
+  <h2>Supplier Quotations</h2>
+  <p style="font-size:12px;color:#777;margin:-6px 0 10px">Attach supplier quotation files (PDF or image) to a project. Stored securely — signed-in users can view; uploading needs the quotation permission.</p>
+  <div class="flex" style="margin-bottom:10px">
+    <div style="max-width:280px"><label>Project</label><select id="qProj" onchange="renderQuotes()"></select></div>
+  </div>
+  <div class="grid" id="quoteForm" style="margin-bottom:6px">
+    <div><label>Supplier</label><input id="qSupplier"></div>
+    <div><label>Quoted Amount (₱)</label><input id="qAmount" type="number" min="0" step="any"></div>
+    <div style="grid-column:span 2"><label>File * (PDF / JPG / PNG)</label><input id="qFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp"></div>
+    <div style="align-self:end"><button class="btn-p" onclick="uploadQuote()">Upload Quotation</button></div>
+  </div>
+  <div style="overflow-x:auto;margin-top:8px">
+  <table><thead><tr><th>Supplier</th><th class="num">Amount</th><th>File</th><th>Uploaded By</th><th>Date</th><th>Actions</th></tr></thead>
+  <tbody id="quoteBody"></tbody></table>
+  </div>
+</div>
+
 <div class="card" id="usersCard" style="display:none">
   <h2>Users &amp; Roles</h2>
   <p style="font-size:12px;color:#777;margin:-6px 0 10px">Admins can add users below and set roles. Admins and Dept Heads can Approve or Delete projects.</p>
@@ -213,24 +231,6 @@ tr:nth-child(even) td{background:#fafbfd}
   <div style="overflow-x:auto;margin-top:12px">
   <table><thead><tr><th>Description</th><th>Brand/Model</th><th>Supplier</th><th>Category</th><th>Unit</th><th class="num">Unit Price</th><th>Actions</th></tr></thead>
   <tbody id="catBody"></tbody></table>
-  </div>
-</div>
-
-<div class="card" id="quoteCard">
-  <h2>Supplier Quotations</h2>
-  <p style="font-size:12px;color:#777;margin:-6px 0 10px">Attach supplier quotation files (PDF or image) to a project. Stored securely — signed-in users can view; uploading needs the quotation permission.</p>
-  <div class="flex" style="margin-bottom:10px">
-    <div style="max-width:280px"><label>Project</label><select id="qProj" onchange="renderQuotes()"></select></div>
-  </div>
-  <div class="grid" id="quoteForm" style="margin-bottom:6px">
-    <div><label>Supplier</label><input id="qSupplier"></div>
-    <div><label>Quoted Amount (₱)</label><input id="qAmount" type="number" min="0" step="any"></div>
-    <div style="grid-column:span 2"><label>File * (PDF / JPG / PNG)</label><input id="qFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp"></div>
-    <div style="align-self:end"><button class="btn-p" onclick="uploadQuote()">Upload Quotation</button></div>
-  </div>
-  <div style="overflow-x:auto;margin-top:8px">
-  <table><thead><tr><th>Supplier</th><th class="num">Amount</th><th>File</th><th>Uploaded By</th><th>Date</th><th>Actions</th></tr></thead>
-  <tbody id="quoteBody"></tbody></table>
   </div>
 </div>
 
