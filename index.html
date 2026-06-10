@@ -150,7 +150,7 @@ tr:nth-child(even) td{background:#fafbfd}
   </div>
   <div class="bar" style="margin:0 0 14px"><button class="btn-p" onclick="addUser()">+ Add User</button></div>
   <div style="overflow-x:auto">
-  <table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Action</th></tr></thead>
+  <table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Action</th></tr></thead>
   <tbody id="usersBody"></tbody></table>
   </div>
 </div>
@@ -581,8 +581,9 @@ function renderUsers(){
     <td><input id="un_${u.id}" value="${esc(u.name||"")}" style="min-width:140px"></td>
     <td>${esc(u.email||"")}</td>
     <td><select id="ur_${u.id}"><option ${u.role==="Admin"?"selected":""}>Admin</option><option ${u.role==="Dept Head"?"selected":""}>Dept Head</option><option ${(u.role!=="Admin"&&u.role!=="Dept Head")?"selected":""}>Staff</option></select></td>
-    <td><button class="btn-p" onclick="saveProfile('${u.id}')">Save</button></td></tr>`).join("")
-    :'<tr><td colspan="4" class="muted">No users yet — they appear here after first sign-in.</td></tr>';
+    <td>${u.active===false?'<span class="tag" style="background:var(--red);color:#fff">Disabled</span>':'<span class="tag" style="background:var(--green);color:#fff">Active</span>'}</td>
+    <td class="act"><button class="btn-p" onclick="saveProfile('${u.id}')">Save</button>${u.id!==_myId?`<button class="btn-s" onclick="setUserActive('${u.id}',${u.active===false})">${u.active===false?"Enable":"Disable"}</button>`:""}</td></tr>`).join("")
+    :'<tr><td colspan="5" class="muted">No users yet — they appear here after first sign-in.</td></tr>';
 }
 async function logAction(action,detail){try{await sb.from("audit_log").insert({user_id:_myId,user_email:_myEmail,action,detail});}catch(e){}}
 function renderPerms(){
@@ -622,6 +623,19 @@ async function addUser(){
   ["nuName","nuEmail","nuPass"].forEach(id=>document.getElementById(id).value="");
   await loadAll();render();
   alert("User added: "+email+" ("+role+").\nThey can now sign in with the temporary password.");
+}
+async function setUserActive(id,active){
+  if(!can("users.manage"))return alert("You don't have permission to change users.");
+  if(id===_myId)return alert("You can't change your own account status.");
+  if(!confirm((active?"Enable":"Disable")+" this user account?"+(active?"":"\nThey will be signed out and blocked from signing in.")))return;
+  let res;
+  try{res=await sb.functions.invoke("admin-set-user-active",{body:{id,active}});}
+  catch(e){return alert("Failed: "+(e.message||e));}
+  if(res.error){let m=res.error.message||"Failed.";try{const c=await res.error.context.json();if(c&&c.error)m=c.error;}catch(_){}return alert("Failed: "+m);}
+  if(res.data&&res.data.error)return alert("Failed: "+res.data.error);
+  await logAction(active?"user.enable":"user.disable",id);
+  await loadAll();render();
+  alert("User "+(active?"enabled":"disabled")+".");
 }
 async function saveProfile(id){
   if(!can("users.manage"))return alert("You don't have permission to change users.");
