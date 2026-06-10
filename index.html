@@ -216,6 +216,24 @@ tr:nth-child(even) td{background:#fafbfd}
   </div>
 </div>
 
+<div class="card" id="quoteCard">
+  <h2>Supplier Quotations</h2>
+  <p style="font-size:12px;color:#777;margin:-6px 0 10px">Attach supplier quotation files (PDF or image) to a project. Stored securely — signed-in users can view; uploading needs the quotation permission.</p>
+  <div class="flex" style="margin-bottom:10px">
+    <div style="max-width:280px"><label>Project</label><select id="qProj" onchange="renderQuotes()"></select></div>
+  </div>
+  <div class="grid" id="quoteForm" style="margin-bottom:6px">
+    <div><label>Supplier</label><input id="qSupplier"></div>
+    <div><label>Quoted Amount (₱)</label><input id="qAmount" type="number" min="0" step="any"></div>
+    <div style="grid-column:span 2"><label>File * (PDF / JPG / PNG)</label><input id="qFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp"></div>
+    <div style="align-self:end"><button class="btn-p" onclick="uploadQuote()">Upload Quotation</button></div>
+  </div>
+  <div style="overflow-x:auto;margin-top:8px">
+  <table><thead><tr><th>Supplier</th><th class="num">Amount</th><th>File</th><th>Uploaded By</th><th>Date</th><th>Actions</th></tr></thead>
+  <tbody id="quoteBody"></tbody></table>
+  </div>
+</div>
+
 <div class="card">
   <h2>BOM Items</h2>
   <div class="flex" style="margin-bottom:10px">
@@ -254,8 +272,8 @@ const PCOLS=["id","name","loc","req","dept","date","stat","pr","purp","prep","he
 const ICOLS=["pid","cat","desc","brand","spec","qty","unit","price","supp","rem"];
 const CCOLS=["desc","brand","supp","cat","unit","price"];
 const ROLES=["Admin","Dept Head","Staff"];
-const PERMS=[["project.create","Create projects"],["project.edit","Edit projects"],["project.approve","Approve projects"],["project.delete","Delete projects"],["item.manage","Manage BOM items"],["catalog.manage","Manage items database"],["data.import","Import / Restore data"],["users.manage","Manage users & roles"],["audit.view","View audit log"]];
-let sb=null, db={projects:[],items:[],catalog:[],profiles:[],audit:[]}, perms={}, editP=null, editI=null, editC=null, bulkOn=false, myRole="Staff", _myId=null, _myEmail="";
+const PERMS=[["project.create","Create projects"],["project.edit","Edit projects"],["project.approve","Approve projects"],["project.delete","Delete projects"],["item.manage","Manage BOM items"],["catalog.manage","Manage items database"],["quote.manage","Upload supplier quotations"],["data.import","Import / Restore data"],["users.manage","Manage users & roles"],["audit.view","View audit log"]];
+let sb=null, db={projects:[],items:[],catalog:[],profiles:[],audit:[],quotes:[]}, perms={}, editP=null, editI=null, editC=null, bulkOn=false, myRole="Staff", _myId=null, _myEmail="";
 function can(p){return !!(perms[myRole]&&perms[myRole][p])}
 
 const peso=n=>"₱"+Number(n||0).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -267,16 +285,17 @@ function setStatus(t,kind){const e=document.getElementById("connStatus");e.textC
 async function loadAll(){
   if(!sb)return false;
   setStatus("Loading…");
-  const [pr,it,ca,pf,rp,al]=await Promise.all([
+  const [pr,it,ca,pf,rp,al,qt]=await Promise.all([
     sb.from("projects").select("*").order("created_at"),
     sb.from("items").select("*").order("created_at"),
     sb.from("catalog").select("*").order("desc"),
     sb.from("profiles").select("*").order("email"),
     sb.from("role_permissions").select("*"),
-    sb.from("audit_log").select("*").order("at",{ascending:false}).limit(100)
+    sb.from("audit_log").select("*").order("at",{ascending:false}).limit(100),
+    sb.from("quotations").select("*").order("at",{ascending:false})
   ]);
   if(pr.error||it.error||ca.error||pf.error||rp.error){setStatus("⚠ Connection error — check config / network","err");console.error(pr.error||it.error||ca.error||pf.error||rp.error);return false}
-  db.projects=pr.data||[]; db.items=it.data||[]; db.catalog=ca.data||[]; db.profiles=pf.data||[]; db.audit=al.data||[];
+  db.projects=pr.data||[]; db.items=it.data||[]; db.catalog=ca.data||[]; db.profiles=pf.data||[]; db.audit=al.data||[]; db.quotes=qt.data||[];
   perms={}; (rp.data||[]).forEach(r=>{(perms[r.role]=perms[r.role]||{})[r.perm]=r.allowed;});
   setStatus("● Online — shared database ("+db.projects.length+" projects)","ok");
   return true;
@@ -659,7 +678,58 @@ function render(){
   setDisp("auditCard",can("audit.view"),"block");
   setDisp("btnImport",can("data.import"));
   setDisp("btnRestore",can("data.import"));
-  renderUsers();renderPerms();renderAudit();
+  renderUsers();renderPerms();renderAudit();renderQuotes();
+}
+
+function renderQuotes(){
+  const sel=document.getElementById("qProj");if(!sel)return;
+  const cur=sel.value;
+  sel.innerHTML='<option value="">— All projects —</option>'+db.projects.map(p=>`<option ${p.id===cur?"selected":""}>${esc(p.id)}</option>`).join("");
+  const pid=sel.value;
+  const form=document.getElementById("quoteForm");if(form)form.style.display=can("quote.manage")?"grid":"none";
+  const tb=document.getElementById("quoteBody");
+  const list=db.quotes.filter(q=>!pid||q.pid===pid);
+  tb.innerHTML=list.length?list.map(q=>{const pp=esc(q.path).replace(/'/g,"\\'");return`<tr>
+    <td>${esc(q.supplier||"")}</td><td class="num">${q.amount!=null&&q.amount!==""?peso(q.amount):""}</td>
+    <td>${esc(q.pid)} · ${esc(q.filename||"")}</td><td>${esc(q.uploaded_email||"")}</td><td>${esc(q.at?new Date(q.at).toLocaleDateString("en-PH"):"")}</td>
+    <td class="act"><button class="btn-s" onclick="viewQuote('${pp}')">View</button>${can("quote.manage")?`<button class="btn-d" onclick="delQuote('${esc(q.id)}','${pp}')">Del</button>`:""}</td></tr>`}).join("")
+    :`<tr><td colspan="6" class="muted">No quotations${pid?" for "+esc(pid):""} yet.</td></tr>`;
+}
+async function uploadQuote(){
+  if(!sb)return alert("Not connected to the database.");
+  if(!can("quote.manage"))return alert("You don't have permission to upload quotations.");
+  const pid=document.getElementById("qProj").value;
+  const supplier=document.getElementById("qSupplier").value.trim();
+  const amount=parseFloat(document.getElementById("qAmount").value);
+  const file=document.getElementById("qFile").files[0];
+  if(!pid)return alert("Select a project first.");
+  if(!file)return alert("Choose a file to upload.");
+  if(file.size>15*1024*1024)return alert("File too large (max 15 MB).");
+  const safe=file.name.replace(/[^\w.\-]+/g,"_");
+  const path=pid+"/"+Date.now()+"_"+safe;
+  const {error:upErr}=await sb.storage.from("quotations").upload(path,file,{upsert:false,contentType:file.type||undefined});
+  if(upErr)return alert("Upload failed: "+upErr.message);
+  const {error}=await sb.from("quotations").insert({pid,supplier,amount:isNaN(amount)?null:amount,filename:file.name,path,uploaded_by:_myId,uploaded_email:_myEmail});
+  if(error){await sb.storage.from("quotations").remove([path]);return alert("Save failed: "+error.message);}
+  await logAction("quote.upload",pid+(supplier?" — "+supplier:""));
+  document.getElementById("qSupplier").value="";document.getElementById("qAmount").value="";document.getElementById("qFile").value="";
+  await loadAll();render();
+  alert("Quotation uploaded.");
+}
+async function viewQuote(path){
+  if(!sb)return;
+  const {data,error}=await sb.storage.from("quotations").createSignedUrl(path,3600);
+  if(error||!data)return alert("Could not open file: "+(error?error.message:"unknown"));
+  window.open(data.signedUrl,"_blank");
+}
+async function delQuote(id,path){
+  if(!can("quote.manage"))return alert("You don't have permission to delete quotations.");
+  if(!confirm("Delete this quotation?"))return;
+  await sb.storage.from("quotations").remove([path]);
+  const {error}=await sb.from("quotations").delete().eq("id",id);
+  if(error)return alert("Delete failed: "+error.message);
+  await logAction("quote.delete",path);
+  await loadAll();render();
 }
 
 function printBOM(){
