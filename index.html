@@ -7,46 +7,46 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
-:root{--navy:#1f3864;--blue:#2e5fa3;--lblue:#d9e2f2;--grey:#f4f6f9;--bord:#cfd6e0;--red:#c0392b;--green:#1e7e34}
+:root{--navy:#1f3864;--blue:#2e5fa3;--lblue:#d9e2f2;--grey:#f4f6f9;--bord:#cfd6e0;--red:#c0392b;--green:#1e7e34;--text:#222;--card:#fff;--alt:#fafbfd;--muted:#888;--accent:#1f3864;--tagtext:#1f3864}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;background:var(--grey)}
+body{font-family:Arial,Helvetica,sans-serif;font-size:14px;color:var(--text);background:var(--grey)}
 header{background:var(--navy);color:#fff;padding:14px 24px;display:flex;justify-content:space-between;align-items:center}
 header h1{font-size:18px}
 header .sub{font-size:12px;opacity:.85}
 .wrap{max-width:1280px;margin:18px auto;padding:0 16px}
-.card{background:#fff;border:1px solid var(--bord);border-radius:8px;padding:16px;margin-bottom:18px}
-.card h2{font-size:15px;color:var(--navy);margin-bottom:12px;border-bottom:2px solid var(--lblue);padding-bottom:6px}
+.card{background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:16px;margin-bottom:18px}
+.card h2{font-size:15px;color:var(--accent);margin-bottom:12px;border-bottom:2px solid var(--lblue);padding-bottom:6px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
 label{font-size:11px;font-weight:bold;color:#555;display:block;margin-bottom:3px;text-transform:uppercase}
-input,select,textarea{width:100%;padding:7px;border:1px solid var(--bord);border-radius:4px;font:inherit}
+input,select,textarea{width:100%;padding:7px;border:1px solid var(--bord);border-radius:4px;font:inherit;background:var(--card);color:var(--text)}
 input:focus,select:focus{outline:2px solid var(--blue)}
 button{padding:8px 16px;border:0;border-radius:4px;cursor:pointer;font:inherit;font-weight:bold}
-.btn-p{background:var(--navy);color:#fff}.btn-s{background:var(--lblue);color:var(--navy)}
+.btn-p{background:var(--navy);color:#fff}.btn-s{background:var(--lblue);color:var(--tagtext)}
 .btn-d{background:var(--red);color:#fff}.btn-g{background:var(--green);color:#fff}
 button:hover{opacity:.88}
 .bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{background:var(--navy);color:#fff;padding:7px 6px;text-align:left;white-space:nowrap}
 td{padding:6px;border-bottom:1px solid var(--bord);vertical-align:top}
-tr:nth-child(even) td{background:#fafbfd}
+tr:nth-child(even) td{background:var(--alt)}
 .num{text-align:right;white-space:nowrap}
 .total-row td{background:var(--lblue)!important;font-weight:bold}
-.tag{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold;background:var(--lblue);color:var(--navy)}
+.tag{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold;background:var(--lblue);color:var(--tagtext)}
 .act{white-space:nowrap}
 .act button{padding:3px 8px;font-size:12px;margin-right:4px}
-.muted{color:#888;font-style:italic;padding:14px;text-align:center}
+.muted{color:var(--muted);font-style:italic;padding:14px;text-align:center}
 .flex{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
 .flex>div{flex:1;min-width:140px}
 .kpi{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px}
-.kpi div{background:#fff;border:1px solid var(--bord);border-radius:8px;padding:10px 18px}
-.kpi b{display:block;font-size:20px;color:var(--navy)}
+.kpi div{background:var(--card);border:1px solid var(--bord);border-radius:8px;padding:10px 18px}
+.kpi b{display:block;font-size:20px;color:var(--accent)}
 .kpi span{font-size:11px;color:#777;text-transform:uppercase}
 /* print form */
 #printArea{display:none}
 @media print{
  body *{visibility:hidden}
  #printArea,#printArea *{visibility:visible}
- #printArea{display:block;position:absolute;top:0;left:0;width:100%;padding:20px;background:#fff}
+ #printArea{display:block;position:absolute;top:0;left:0;width:100%;padding:20px;background:#fff;color:#000}
  #printArea table{font-size:11px}
  #printArea th{background:#1f3864!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
@@ -62,6 +62,8 @@ tr:nth-child(even) td{background:#fafbfd}
 <body>
 <header>
   <div><h1>IT DEPARTMENT — BOM ENTRY SYSTEM</h1><div class="sub" id="connStatus">Connecting…</div></div>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end">
+  <label style="font-size:11px;color:#fff;display:flex;align-items:center;gap:5px;text-transform:uppercase;font-weight:bold">Theme<select id="themeSel" onchange="applyTheme(this.value)" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:4px;padding:4px 6px;font-size:12px;text-transform:none;font-weight:normal"></select></label>
   <div class="bar" id="topBar" style="display:none">
     <span id="userTag" style="font-size:12px;align-self:center;opacity:.9"></span>
     <button class="btn-s" onclick="exportCSV()">Export CSV</button>
@@ -71,6 +73,7 @@ tr:nth-child(even) td{background:#fafbfd}
     <button class="btn-s" id="btnImport" onclick="document.getElementById('xlsxFile').click()">Import Excel</button>
     <input type="file" id="xlsxFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="if(this.files[0]){importExcel(this.files[0]);this.value=''}">
     <button class="btn-s" onclick="signOut()">Sign out</button>
+  </div>
   </div>
 </header>
 <div class="wrap" id="loginWrap" style="max-width:400px;display:none">
@@ -281,6 +284,19 @@ const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&g
 const fill=(id,arr,blank)=>{const s=document.getElementById(id);s.innerHTML=(blank?`<option value="">${blank}</option>`:"")+arr.map(v=>`<option>${esc(v)}</option>`).join("")};
 const pick=(o,cols)=>{const r={};cols.forEach(k=>r[k]=(o[k]===undefined||o[k]==="")?null:o[k]);return r};
 function setStatus(t,kind){const e=document.getElementById("connStatus");e.textContent=t;e.style.color=kind==="err"?"#ffd2d2":kind==="ok"?"#bfe3c0":"#fff"}
+
+const BASE={"--navy":"#1f3864","--blue":"#2e5fa3","--lblue":"#d9e2f2","--grey":"#f4f6f9","--bord":"#cfd6e0","--text":"#222","--card":"#fff","--alt":"#fafbfd","--muted":"#888","--accent":"#1f3864","--tagtext":"#1f3864"};
+const THEMES={
+  navy:{l:"Navy (default)",v:{}},
+  teal:{l:"Teal",v:{"--navy":"#0f766e","--blue":"#0d9488","--lblue":"#cbf3ee","--grey":"#eefbf8","--accent":"#0f766e","--tagtext":"#0f766e"}},
+  forest:{l:"Forest Green",v:{"--navy":"#14532d","--blue":"#15803d","--lblue":"#d4f1de","--grey":"#f1faf4","--accent":"#14532d","--tagtext":"#14532d"}},
+  maroon:{l:"Maroon",v:{"--navy":"#7f1d1d","--blue":"#b91c1c","--lblue":"#f6dada","--grey":"#fcf4f4","--accent":"#7f1d1d","--tagtext":"#7f1d1d"}},
+  indigo:{l:"Indigo",v:{"--navy":"#3730a3","--blue":"#4f46e5","--lblue":"#dfe0fb","--grey":"#f4f4fc","--accent":"#3730a3","--tagtext":"#3730a3"}},
+  graphite:{l:"Graphite",v:{"--navy":"#334155","--blue":"#475569","--lblue":"#dde3ea","--grey":"#f2f4f7","--accent":"#334155","--tagtext":"#334155"}},
+  dark:{l:"Dark Mode",v:{"--navy":"#1e293b","--blue":"#60a5fa","--lblue":"#334155","--grey":"#0f172a","--bord":"#334155","--text":"#e2e8f0","--card":"#1e293b","--alt":"#172033","--muted":"#94a3b8","--accent":"#93c5fd","--tagtext":"#e2e8f0"}}
+};
+function applyTheme(key){const t=THEMES[key]||THEMES.navy;const m={...BASE,...t.v};Object.entries(m).forEach(([k,v])=>document.documentElement.style.setProperty(k,v));try{localStorage.setItem("bom_theme",key)}catch(e){}}
+function initTheme(){let s="navy";try{s=localStorage.getItem("bom_theme")||"navy"}catch(e){}if(!THEMES[s])s="navy";const el=document.getElementById("themeSel");if(el)el.innerHTML=Object.entries(THEMES).map(([k,t])=>`<option value="${k}" ${k===s?"selected":""}>${t.l}</option>`).join("");applyTheme(s);}
 
 async function loadAll(){
   if(!sb)return false;
@@ -905,6 +921,7 @@ function exportCSV(){
 }
 function backup(){dl(new Blob([JSON.stringify(db,null,1)],{type:"application/json"}),"BOM_Backup_"+new Date().toISOString().slice(0,10)+".json")}
 function dl(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href)}
+initTheme();
 init();
 </script>
 </body>
